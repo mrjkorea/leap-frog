@@ -1,0 +1,12 @@
+frog-croak.wav
+  Source: Wikimedia Commons — File:Single_Frog_Croak.oga
+  Author: MichaeltheFox8621
+  License: CC BY-SA 4.0
+  https://commons.wikimedia.org/wiki/File:Single_Frog_Croak.oga
+  Converted to mono WAV for web playback.
+
+splash-heavy.wav, splash-dunk.wav
+  Source: OpenGameArt — 40 CC0 water / splash / slime SFX (splash_01, splash_07)
+  Author: rubberduck
+  License: CC0
+  https://opengameart.org/content/40-cc0-water-splash-slime-sfx
