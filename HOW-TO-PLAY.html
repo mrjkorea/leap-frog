@@ -1,0 +1,69 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+    <title>How to play Leap Frog — MRJ English</title>
+    <style>
+      :root { color-scheme: dark; }
+      body {
+        margin: 0;
+        min-height: 100dvh;
+        background: #041510;
+        color: #e8fff4;
+        font-family: "Trebuchet MS", "Avenir Next", system-ui, sans-serif;
+        line-height: 1.45;
+      }
+      main {
+        max-width: 42rem;
+        margin: 0 auto;
+        padding: calc(20px + env(safe-area-inset-top)) 20px 40px;
+      }
+      h1, h2 { color: #ffe08a; }
+      a { color: #7dff9a; font-weight: 800; }
+      table { width: 100%; border-collapse: collapse; }
+      th, td { text-align: left; padding: 8px 6px; border-bottom: 1px solid #ffffff22; }
+      .back {
+        display: inline-block;
+        margin-top: 8px;
+        background: linear-gradient(180deg, #8dff7a, #2fbf62);
+        color: #073018;
+        text-decoration: none;
+        border-radius: 14px;
+        padding: 12px 16px;
+      }
+      code { color: #ffe08a; }
+    </style>
+  </head>
+  <body>
+    <main>
+      <h1>How to play Leap Frog</h1>
+      <p>Same URL on phone, tablet, classroom PC, and laptop.</p>
+      <h2>Goal</h2>
+      <p>Hop the frog to the <strong>correct lily pad</strong>. Get <strong>5 right answers</strong> to reach land.</p>
+      <h2>Controls</h2>
+      <table>
+        <thead>
+          <tr><th>Device</th><th>Left</th><th>Center</th><th>Right</th></tr>
+        </thead>
+        <tbody>
+          <tr><td>Phone / tablet</td><td>Tap left pad</td><td>Tap center pad</td><td>Tap right pad</td></tr>
+          <tr><td>Computer</td><td><code>1</code> or ←</td><td><code>2</code> or ↑</td><td><code>3</code> or →</td></tr>
+        </tbody>
+      </table>
+      <p>You can also tap the word on a pad.</p>
+      <h2>Rules</h2>
+      <ul>
+        <li>Read the question above the three pads (left / center / right).</li>
+        <li>You have 15 seconds. Waiting too long sinks the home pad.</li>
+        <li>Right hop: jump + croak. Wrong hop or timeout: splash and lose a life.</li>
+        <li>Three lives. Five correct hops reach land.</li>
+      </ul>
+      <h2>Word packs</h2>
+      <p>Words load from JSON (<code>packs/starter-en.json</code>), not a hardcoded list. Drop Excel / CSV / JSON on the start screen, or use <code>?pack=packs/starter.csv</code>.</p>
+      <h2>Audio</h2>
+      <p>Baked local MP3/WAV files only. No server TTS and no browser speech. Sound starts when you tap <strong>Start jumping</strong>.</p>
+      <p><a class="back" href="./">Play Leap Frog</a></p>
+    </main>
+  </body>
+</html>
