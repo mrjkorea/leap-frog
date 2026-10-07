@@ -1,0 +1,7 @@
+{
+  "name": "leap-frog",
+  "private": true,
+  "scripts": {
+    "test": "node --test test/mrj-leap-frog-progress.test.js"
+  }
+}
