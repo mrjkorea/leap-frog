@@ -2,6 +2,6 @@
   "name": "leap-frog",
   "private": true,
   "scripts": {
-    "test": "node --test test/mrj-leap-frog-progress.test.js"
+    "test": "node --check assets/index-Bs4ORQ3Y.js && node --check mrj-leap-frog-progress.js && node --check mrj-auth-progress.js && node --test test/mrj-leap-frog-progress.test.js"
   }
 }
