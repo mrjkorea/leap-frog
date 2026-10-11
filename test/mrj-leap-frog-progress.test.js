@@ -2,9 +2,12 @@
 
 const test = require("node:test");
 const assert = require("node:assert/strict");
+const fs = require("node:fs");
+const path = require("node:path");
 const lf = require("../mrj-leap-frog-progress.js");
 
 const PROGRAM = "leap-frog";
+const BUILD = "20261011-savefix";
 
 test("ignores rows from other programs", () => {
   const rows = [
@@ -68,4 +71,57 @@ test("filterRowsForProgram", () => {
   ]);
   assert.equal(rows.length, 1);
   assert.equal(rows[0].item_id, "yes");
+});
+
+test("pack-scoped passed map ignores other packs and round rows", () => {
+  const rows = [
+    { program: PROGRAM, item: "packA:q01", score: "1/1" },
+    { program: PROGRAM, item: "q02", score: "1/1" },
+    { program: PROGRAM, item: "packB:q03", score: "1/1" },
+    { program: PROGRAM, item: "round:packA", score: "4/5" },
+  ];
+  const map = lf.passedMapFromRows(rows, PROGRAM, "packA");
+  assert.deepEqual(Object.keys(map).sort(), ["q01", "q02"]);
+  assert.equal(map.q01, true);
+  assert.equal(map.q02, true);
+  assert.equal(map.q03, undefined);
+});
+
+test("buildWordPostOpts uses pack-prefixed itemId", () => {
+  const opts = lf.buildWordPostOpts(
+    { pack_id: "packA", title: "Pack A" },
+    { item_id: "q01" },
+    true
+  );
+  assert.equal(opts.itemId, "packA:q01");
+  assert.equal(opts.program, PROGRAM);
+  assert.equal(opts.scoreValue, 1);
+  assert.equal(opts.scoreMax, 1);
+  assert.equal(opts.itemType, "word");
+  assert.equal(opts.appName, "MRJ Leap Frog");
+});
+
+test("buildRoundPostOpts sends round summary", () => {
+  const opts = lf.buildRoundPostOpts(
+    { pack_id: "packA" },
+    [{ correct: true }, { correct: false }, { correct: true }, { correct: true }, { correct: false }],
+    { round: 2, lives: 1, dead: false, corrects: 4, target: 5 }
+  );
+  assert.equal(opts.itemId, "round:packA");
+  assert.equal(opts.scoreValue, 3);
+  assert.equal(opts.scoreMax, 5);
+  assert.equal(opts.itemType, "round");
+});
+
+test("index.html cache-bust stamps match mrj-build", () => {
+  const html = fs.readFileSync(path.join(__dirname, "..", "index.html"), "utf8");
+  const m = html.match(/name="mrj-build"\s+content="([^"]+)"/);
+  assert.ok(m, "mrj-build meta");
+  const build = m[1];
+  assert.ok(build.includes(BUILD), "build string includes savefix stamp");
+  const vParams = [...html.matchAll(/\?v=([^"']+)/g)].map((x) => x[1]);
+  assert.ok(vParams.length >= 4, "expected versioned script tags");
+  for (const v of vParams) {
+    assert.equal(v, BUILD, "each ?v= matches build stamp");
+  }
 });
