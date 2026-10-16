@@ -348,7 +348,7 @@ export function startGame(host, { pack, wm = false, maker = false, studentId = "
   const api = {
     version: "3.0.0",
     getState() {
-      return { student_id: c.studentId, session_id: c.sessionId, pack_id: e.pack_id, view: c.view, points: c.points, errors: c.errors, lives: c.lives, round: c.round, corrects: c.corrects, remaining: remaining(), total: target(), pack_items: e.items.length, current_item: c.trial ? c.trial.item.item_id : null, hops_left: remaining(), land: landNear(), win_corrects: target(), streak: c.streak, correct_lane: c.trial && !c.trial.locked && !c.jumping ? c.trial.correctLane : null, low_quality: stage.low };
+      return { student_id: c.studentId, session_id: c.sessionId, pack_id: e.pack_id, view: c.view, points: c.points, errors: c.errors, lives: c.lives, round: c.round, corrects: c.corrects, remaining: remaining(), total: target(), pack_items: e.items.length, current_item: c.trial ? c.trial.item.item_id : null, hops_left: remaining(), land: landNear(), win_corrects: target(), streak: c.streak, correct_lane: c.trial && !c.trial.locked && !c.jumping ? c.trial.correctLane : null, low_quality: stage.low, rule: wm ? "wm:all-items" : "fixed-5", embed_student: wm ? "url-student" : "" };
     },
     getRecords: () => c.records.slice(),
     loadPack(L) { e = L; c.pack = L; c.roundDone = {}; refill(); $("#lf-goal").textContent = `Loaded ${L.title} · ${L.items.length} questions. Get ${target()} right to reach land.`; },

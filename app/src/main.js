@@ -23,7 +23,9 @@ async function loadPack() {
   }
   if (n === "session") { try { const raw = sessionStorage.getItem("mrj.wm.gamepack"); if (raw) return normalizePack(JSON.parse(raw)); } catch (e) {} }
   if (n && n !== "session") { try { return await fetchPack(resolve(n)); } catch (e) {} }
-  return fetchPack("./packs/starter-en.json");
+  const meta = document.querySelector('meta[name="lf-default-pack"]'); // standalone index.html names its default pack
+  if (!meta) throw new Error("Open Leap Frog from Word Master to get your words.");
+  return fetchPack(meta.content);
 }
 async function boot() {
   const pack = await loadPack();

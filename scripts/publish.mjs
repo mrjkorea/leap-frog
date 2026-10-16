@@ -39,10 +39,23 @@ const html = wmDir
   </head>
   <body>
     <div id="app"></div>
+    <script>
+      /* Opened on its own (not inside Word Master): show the MRJ sign-in door. Embedded: Word Master reports. */
+      (function () {
+        var q = location.search || "";
+        var embedded = window.parent !== window || /(?:^|[?&])pack=session(?:&|$)/.test(q);
+        if (embedded) return;
+        var css = document.createElement("link"); css.rel = "stylesheet"; css.href = "https://mrjkorea.github.io/mrj-signin/mrj-auth.css"; document.head.appendChild(css);
+        var auth = document.createElement("script"); auth.src = "https://mrjkorea.github.io/mrj-signin/mrj-auth.js";
+        auth.onload = function () { var boot = document.createElement("script"); boot.src = "https://mrjkorea.github.io/mrj-signin/mrj-auth-boot.js"; boot.setAttribute("data-mrj-app", "leap-frog"); document.body.appendChild(boot); };
+        document.body.appendChild(auth);
+      })();
+    </script>
   </body>
 </html>
 `
   : `${head}
+    <meta name="lf-default-pack" content="./packs/starter-en.json" />
     <script type="module" crossorigin src="./${js}?v=${build}"></script>
     <link rel="stylesheet" crossorigin href="./${css}?v=${build}">
   </head>
