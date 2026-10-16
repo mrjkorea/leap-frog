@@ -10,3 +10,11 @@ splash-heavy.wav, splash-dunk.wav
   Author: rubberduck
   License: CC0
   https://opengameart.org/content/40-cc0-water-splash-slime-sfx
+
+--- Rebuild (v3, 2026-10-16) ---
+music-happy-adventure.mp3
+  "Happy Adventure (Loop)" by TinyWorlds — License: CC0
+  https://opengameart.org/content/happy-adventure-loop  (re-encoded 64 kbps mp3)
+sfx/*.mp3 (hop, pop, chime, sparkle, buzz, fanfare, lose, whoosh, thud)
+  Procedural, made for MRJ games and baked to mp3 — CC0.
+Question cues: audio/q/<item_id>.mp3 (baked). No speechSynthesis, no /api/tts.
