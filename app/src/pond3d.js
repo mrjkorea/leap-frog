@@ -199,11 +199,12 @@ export async function createPond3D(host, { quality } = {}) {
     const t = S3.t; tw.update(dt);
     water.material.uniforms.uT.value = t; water.material.uniforms.uHi.value = S3.low ? 0.4 : 1;
     // camera eases after the home pad (smooth dolly forward + slight sway), shake on splashes/chomps
+    if (V.win) V.homeZ = frog.position.z + 0.6; // win: follow the frog itself onto the shore
     V.camZ += (V.homeZ - V.camZ) * (1 - Math.exp(-3.2 * dt));
     const cz = V.camZ, P = V.portrait;
     V.winK += (V.win - V.winK) * (1 - Math.exp(-2.2 * dt)); const W = V.winK; // win: swoop low behind the frog on the shore
     camera.position.set(Math.sin(t * 0.35) * 0.18 + (Math.random() - 0.5) * V.shake, lerp(P ? 7.6 : 4.9, P ? 3.4 : 2.5, W) + Math.sin(t * 0.5) * 0.06 + (Math.random() - 0.5) * V.shake, cz + lerp(P ? 3.6 : 4.7, P ? 4.2 : 3.9, W));
-    camera.lookAt(0, lerp(0, 0.75, W), cz - lerp(P ? 2.4 : 2.1, 0.2, W));
+    camera.lookAt(0, lerp(0, 0.55, W), cz - lerp(P ? 2.4 : 2.1, 0.6, W));
     V.shake *= Math.pow(0.004, dt); if (V.shake < 0.003) V.shake = 0;
     water.position.z = cz - 30; water.material.uniforms.uCam.value.copy(camera.position);
     sky.position.set(0, 0, cz); sun.position.set(-26, 22, cz - 70); water.material.uniforms.uSun.value.set(-0.35, 0.45, -1);
