@@ -34,6 +34,6 @@ Need `question`, `correct`, and at least one wrong answer.
 
 ## Audio
 
-Baked local files only (`audio/*.mp3` with `.wav` fallback). No server TTS and no `speechSynthesis`. Sound unlocks when you tap **Start jumping**.
+Baked local files only (`audio/*.mp3`). No server TTS and no `speechSynthesis`. Sound unlocks when you tap **Start jumping**.
 
 [Play Leap Frog](./)
