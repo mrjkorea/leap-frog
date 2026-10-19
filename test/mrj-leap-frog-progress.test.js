@@ -7,7 +7,7 @@ const path = require("node:path");
 const lf = require("../mrj-leap-frog-progress.js");
 
 const PROGRAM = "leap-frog";
-const BUILD = "20261013-scoresrecv";
+const BUILD = "20261019-3d";
 
 test("ignores rows from other programs", () => {
   const rows = [

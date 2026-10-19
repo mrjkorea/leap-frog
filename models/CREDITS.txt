@@ -1,0 +1,5 @@
+3D models: Kenney "Nature Kit" (www.kenney.nl) — CC0 1.0 Universal (public domain). See KENNEY-NATURE-KIT-LICENSE.txt.
+  lily_large / lily_small (background lilies), flower_*A, grass_*, plant_*, rock_*, stone_tallB, log, stump_round,
+  mushroom_redGroup, tree_default / tree_fat / tree_oak (pond banks and the shore).
+The frog, the word lily pads, the water shader, ripples and splashes are procedural three.js code (this repo).
+Piranha texture: textures/piranha.png from the original game (unchanged). Rendering: three.js (MIT). Audio: see ../audio/CREDITS.txt.
