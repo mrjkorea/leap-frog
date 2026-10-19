@@ -30,7 +30,7 @@ async function loadPack() {
 async function boot() {
   const pack = await loadPack();
   const q = qs.get("q");
-  const game = startGame(app, { pack, wm, maker, studentId: wm ? embedStudent : "", quality: q === "low" || q === "high" ? q : undefined });
+  const game = await startGame(app, { pack, wm, maker, studentId: wm ? embedStudent : "", quality: q === "low" || q === "high" ? q : undefined });
   if (wm || !maker) return;
   const input = document.getElementById("lf-file"), drop = input && input.closest("label");
   const take = async (f) => { try { game.loadPack(await fileToPack(f)); } catch (err) { document.getElementById("lf-goal").textContent = "Could not read that pack: " + err.message; } };

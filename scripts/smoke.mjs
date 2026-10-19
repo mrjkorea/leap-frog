@@ -8,7 +8,7 @@ const root = path.resolve(path.dirname(new URL(import.meta.url).pathname), "..")
 const out = path.resolve(process.argv[2] || "/workspace/leap-frog-shots");
 const wmDir = process.argv[3] ? path.resolve(process.argv[3]) : null;
 fs.mkdirSync(out, { recursive: true });
-const TYPES = { ".html": "text/html", ".js": "text/javascript", ".css": "text/css", ".json": "application/json", ".mp3": "audio/mpeg", ".woff2": "font/woff2", ".woff": "font/woff", ".webp": "image/webp", ".png": "image/png" };
+const TYPES = { ".html": "text/html", ".js": "text/javascript", ".css": "text/css", ".json": "application/json", ".mp3": "audio/mpeg", ".woff2": "font/woff2", ".woff": "font/woff", ".webp": "image/webp", ".png": "image/png", ".glb": "model/gltf-binary" };
 const serve = (dir, extra = {}) => new Promise((res) => { const s = http.createServer((req, rsp) => {
   const u = decodeURIComponent(req.url.split("?")[0]);
   if (extra[u]) { rsp.writeHead(200, { "content-type": "text/html" }); return rsp.end(extra[u]); }
@@ -32,27 +32,38 @@ async function newPage(browser, opts, posts) {
 }
 const st = (page) => page.evaluate(() => window.MRJLeapFrog.getState());
 const waitView = (page, v, ms = 90000) => page.waitForFunction((v) => window.MRJLeapFrog && window.MRJLeapFrog.getState().view === v, v, { timeout: ms });
-const browser = await chromium.launch({ args: ["--autoplay-policy=no-user-gesture-required"] });
+const browser = await chromium.launch({ args: ["--autoplay-policy=no-user-gesture-required", "--use-gl=angle", "--use-angle=swiftshader", "--enable-unsafe-swiftshader"] });
 const server = await serve(root); const B = `http://localhost:${server.address().port}`;
 try {
   const posts = [];
   const { ctx, page } = await newPage(browser, { viewport: { width: 1280, height: 800 } }, posts);
   await page.goto(`${B}/index.html`);
-  await page.waitForFunction(() => { const b = document.querySelector("#lf-start .go"); return b && !b.disabled; }, null, { timeout: 15000 });
+  await page.waitForFunction(() => { const b = document.querySelector("#lf-start .go"); return b && !b.disabled; }, null, { timeout: 60000 });
   await page.waitForTimeout(800);
   await page.screenshot({ path: `${out}/01-start-desktop.png` });
   await page.click("#lf-start .go");
   await waitView(page, "play");
   await page.waitForTimeout(900);
   await page.screenshot({ path: `${out}/02-question-pads.png` });
+  // input: tapping the 3D pad itself (raycast, not the label) hops there; then arrow keys hop too
+  { await page.waitForFunction(() => window.MRJLeapFrog.getState().correct_lane != null, null, { timeout: 20000 });
+    const s0 = await page.evaluate(() => window.MRJLeapFrog.getState()), pt = await page.evaluate((i) => window.MRJLeapFrog.padScreen(i), s0.correct_lane);
+    await page.mouse.click(pt.x, pt.y);
+    await page.waitForFunction((n) => window.MRJLeapFrog.getState().corrects > n, s0.corrects, { timeout: 20000 });
+    const s1 = await page.evaluate(() => window.MRJLeapFrog.getState()); check(s1.corrects === s0.corrects + 1 && s1.errors === 0, "tap on the right 3D lily pad = correct hop");
+    await page.waitForFunction(() => window.MRJLeapFrog.getState().correct_lane != null, null, { timeout: 20000 });
+    const s2 = await page.evaluate(() => window.MRJLeapFrog.getState());
+    await page.keyboard.press(["ArrowLeft", "ArrowUp", "ArrowRight"][s2.correct_lane]);
+    await page.waitForFunction((n) => window.MRJLeapFrog.getState().corrects > n, s2.corrects, { timeout: 20000 });
+    check(true, "arrow key for the right lane = correct hop"); }
   await page.evaluate(PILOT, "right");
-  await page.waitForFunction(() => window.MRJLeapFrog.getState().streak >= 2, null, { timeout: 30000 });
+  await page.waitForFunction(() => window.MRJLeapFrog.getState().streak >= 2, null, { timeout: 60000 });
   await page.waitForTimeout(250);
   await page.screenshot({ path: `${out}/03-combo.png` });
-  await page.waitForFunction(() => window.MRJLeapFrog.getState().land, null, { timeout: 30000 });
+  await page.waitForFunction(() => window.MRJLeapFrog.getState().land, null, { timeout: 60000 });
   await page.waitForTimeout(1200);
   await page.screenshot({ path: `${out}/04-land-near.png` });
-  await page.waitForFunction(() => window.MRJLeapFrog.getState().view === "snack", null, { timeout: 30000 });
+  await page.waitForFunction(() => window.MRJLeapFrog.getState().view === "snack", null, { timeout: 60000 });
   await page.waitForTimeout(700);
   await page.screenshot({ path: `${out}/05-win-confetti.png` });
   await waitView(page, "end");
@@ -72,7 +83,7 @@ try {
   const posts2 = [];
   const p2 = await newPage(browser, { viewport: { width: 1280, height: 800 } }, posts2);
   await p2.page.goto(`${B}/index.html?q=low`);
-  await p2.page.waitForFunction(() => { const b = document.querySelector("#lf-start .go"); return b && !b.disabled; }, null, { timeout: 15000 });
+  await p2.page.waitForFunction(() => { const b = document.querySelector("#lf-start .go"); return b && !b.disabled; }, null, { timeout: 60000 });
   await p2.page.click("#lf-start .go"); await waitView(p2.page, "play");
   await p2.page.evaluate(PILOT, "wrong");
   await p2.page.waitForFunction(() => window.MRJLeapFrog.getState().lives === 2, null, { timeout: 20000 });
@@ -87,7 +98,7 @@ try {
   // phone-size layout (layout check only)
   const p3 = await newPage(browser, { viewport: { width: 390, height: 844 }, deviceScaleFactor: 2, hasTouch: true }, []);
   await p3.page.goto(`${B}/index.html`);
-  await p3.page.waitForFunction(() => { const b = document.querySelector("#lf-start .go"); return b && !b.disabled; }, null, { timeout: 15000 });
+  await p3.page.waitForFunction(() => { const b = document.querySelector("#lf-start .go"); return b && !b.disabled; }, null, { timeout: 60000 });
   await p3.page.click("#lf-start .go"); await waitView(p3.page, "play"); await p3.page.waitForTimeout(900);
   await p3.page.screenshot({ path: `${out}/09-phone-layout.png` });
   const ov = await p3.page.evaluate(() => [...document.querySelectorAll(".pad-word")].every((b) => { const r = b.getBoundingClientRect(); return r.left >= 0 && r.right <= innerWidth; }));
@@ -104,7 +115,7 @@ try {
     const signin = []; wp.page.on("request", (r) => { if (/mrj-signin|script\.google/.test(r.url())) signin.push(r.url()); });
     await wp.page.goto(`http://localhost:${ws.address().port}/host.html`);
     const f = await (await wp.page.waitForSelector("#f")).contentFrame();
-    await f.waitForFunction(() => { const b = document.querySelector("#lf-start .go"); return b && !b.disabled; }, null, { timeout: 15000 });
+    await f.waitForFunction(() => { const b = document.querySelector("#lf-start .go"); return b && !b.disabled; }, null, { timeout: 60000 });
     await f.click("#lf-start .go");
     await f.waitForFunction(() => window.MRJLeapFrog.getState().view === "play");
     await f.waitForTimeout(800); await wp.page.screenshot({ path: `${out}/10-wordmaster-play.png` });

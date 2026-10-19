@@ -2,6 +2,8 @@
 //   question + 3 lily pads (L/C/R), one correct. 15s timer (pack.seconds) sinks the home pad.
 //   right: +100 + time bonus, hop; wrong / timeout: -1 life (3 lives), splash or CHOMP (when land is near).
 //   standalone: 5 right hops reach land. Word Master: every word right (wm:all-items).
+// v3.1: the world is real 3D again (pond3d.js, three.js) — same layout as the original: frog on the home pad,
+// three answer pads ahead, sunset pond, piranhas near the shore. Logic below is unchanged from v3.0.
 import { createStage } from "./kit/stage.js";
 import { createFx, ease, lerp, clamp } from "./kit/fx.js";
 import { createInput } from "./kit/input.js";
@@ -9,7 +11,8 @@ import { el, esc, muteButton } from "./kit/ui.js";
 import { createAudio } from "./kit/audio.js";
 import { shuffle } from "./pack.js";
 import { mrjPost, mrjPostRound, passedMap, wmDone } from "./report.js";
-import { drawWater, drawReeds, drawShore, drawPad, drawFrog, drawPiranha, drawFly } from "./art.js";
+import { createPond3D } from "./pond3d.js";
+import { THREE } from "./kit/three-stage.js";
 
 const LIVES = 3, TARGET = 5, ROUNDS = 1;
 const rec = (o) => ({ student_id: "", session_id: "", module_id: "leap_frog", activity_id: "lily_jump", item_id: "", skill_tags: [], response: "", correct: false, latency_ms: 0, accuracy: 0, points: 0, errors: 0, started_at: new Date().toISOString(), ended_at: new Date().toISOString(), ui_locale: "en", ...o });
@@ -18,10 +21,12 @@ const cleanId = (d) => { if (!d || d.id == null) return ""; const e = String(d.i
 let authCb = null, authSeen = false, authDetail = null;
 window.addEventListener("mrj-auth-ready", (n) => { authSeen = true; authDetail = (n && n.detail) || {}; authCb && authCb(authDetail); });
 
-export function startGame(host, { pack, wm = false, maker = false, studentId = "", quality } = {}) {
+export async function startGame(host, { pack, wm = false, maker = false, studentId = "", quality } = {}) {
   let e = pack;
   host.innerHTML = "";
-  const stage = createStage(host, { quality });
+  const pond = await createPond3D(host, { quality });
+  const stage = createStage(host, { quality: "high" }); // transparent 2D overlay: floating text + flashes only
+  stage.canvas.classList.add("overlay");
   const fx = createFx(stage);
   const audio = createAudio({
     sfx: { croak: "./audio/frog-ribbit.mp3", splash: "./audio/splash-heavy.mp3", dunk: "./audio/splash-dunk.mp3", hop: "./audio/sfx/hop.mp3", pop: "./audio/sfx/pop.mp3", chime: "./audio/sfx/chime.mp3", sparkle: "./audio/sfx/sparkle.mp3", buzz: "./audio/sfx/buzz.mp3", fanfare: "./audio/sfx/fanfare.mp3", lose: "./audio/sfx/lose.mp3", whoosh: "./audio/sfx/whoosh.mp3", chomp: "./audio/sfx/thud.mp3" },
@@ -53,53 +58,48 @@ export function startGame(host, { pack, wm = false, maker = false, studentId = "
   const remaining = () => Math.max(0, target() - c.corrects);
   const landNear = () => remaining() <= 2;
 
-  // ---------- world (screen-space layout recomputed on resize) ----------
-  const W = { lanes: [0, 0, 0], padY: 0, homeY: 0, r: 40, frogSize: 60, shoreY: -200, shoreTarget: -200, scroll: 0 };
-  const pads = [0, 1, 2].map((i) => ({ lane: i, x: 0, y: 0, r: 40, scale: 0, sink: 0, alive: true, glow: 0, hue: (i - 1) * 8, bob: Math.random() * 6 }));
-  const home = { x: 0, y: 0, r: 46, scale: 1, sink: 0, alive: true, hue: -4 };
-  const frog = { x: 0, y: 0, z: 0, size: 60, sx: 1, sy: 1, rot: 0, blink: 0, tongue: 0, visible: true, under: 0 };
-  const fish = { on: false, t: 0, x: 0, y: 0, flip: false };
-  const flies = [0, 1, 2].map((i) => ({ a: i * 2, r: 60 + i * 20 }));
-  const ripples = [];
-  const decor = [[0.07, 0.4, 0.05, 20, true], [0.93, 0.33, 0.04, -10, false], [0.12, 0.93, 0.06, 5, false], [0.9, 0.88, 0.05, 25, true], [0.85, 0.62, 0.03, 0, false]].map(([x, y, r, h, f]) => ({ x, y, r, h, f }));
-  function layout() {
-    const w = stage.w, h = stage.h;
-    const gap = Math.min(w * 0.31, 300, h * 0.42);
-    W.r = clamp(Math.min(gap * 0.42, h * 0.12), 34, 110);
-    W.frogSize = W.r * 1.15;
-    W.padY = h * 0.5; W.homeY = h * 0.86;
-    W.lanes = [w / 2 - gap, w / 2, w / 2 + gap];
-    pads.forEach((p, i) => { p.x = W.lanes[i]; p.y = W.padY; p.r = W.r; });
-    home.x = w / 2; home.y = W.homeY; home.r = W.r * 1.1;
-    W.shoreTarget = landNear() && c.view !== "start" ? h * 0.27 : -40;
-    if (!frog.busy) placeFrogHome();
-  }
-  stage.onResize = layout;
-  function placeFrogHome() { frog.x = home.x; frog.y = home.y - home.r * 0.1; frog.z = 0; frog.rot = 0; frog.sx = frog.sy = 1; frog.size = W.frogSize; frog.visible = true; frog.under = 0; }
+  // ---------- world (3D, world units) ----------
+  const { frog, V, tw } = pond;
+  const F = frog.userData;
+  let home = pond.home; const pads = pond.pads;
+  const padZ = () => V.homeZ - V.gap;
+  const shoreZ = () => padZ() - V.gap + 0.6;
+  function placePads() { const L = pond.lanes(); pads.forEach((p, i) => { p.position.set(L[i], 0.1, padZ()); }); }
+  function layout() { if (!F.busy && !c.jumping) { placePads(); placeFrogHome(); } }
+  pond.onResize = layout;
+  function legsPose(k) { F.legs.forEach((L) => { L.hip.rotation.x = -k * 0.9; L.knee.rotation.x = k * 1.6; }); }
+  function placeFrogHome() { frog.visible = true; frog.position.set(home.position.x, home.position.y + 0.06, home.position.z); frog.rotation.set(0, Math.PI, 0); F.body.scale.set(1, 1, 1); F.body.rotation.set(0, 0, 0); F.body.position.y = 0; pond.frogBase = frog.position.y; legsPose(0); }
 
   // ---------- tweens ----------
-  const tweens = [];
-  const tween = (dur, fn, done) => tweens.push({ t: 0, dur, fn, done });
   const wait = (ms) => new Promise((r) => setTimeout(r, ms));
-  function hop(toX, toY, { height = 1, flip = false, dur = 0.62 } = {}) {
+  const tween = (dur, fn, done) => tw.add(dur, fn, { ease: (t) => t, done });
+  function hop(toX, toZ, { toY = 0.16, height = 1, flip = false, dur = 0.62 } = {}) {
     return new Promise((res) => {
-      frog.busy = true; c.jumping = true;
-      const fx0 = frog.x, fy0 = frog.y, H = W.r * 2.2 * height;
+      F.busy = true; c.jumping = true;
+      const x0 = frog.position.x, y0 = frog.position.y, z0 = frog.position.z, H = 1.05 * height;
+      const r0 = frog.rotation.y, face = Math.abs(toX - x0) + Math.abs(toZ - z0) > 0.05 ? Math.atan2(toX - x0, toZ - z0) : r0;
       audio.play("hop", { vol: 0.5, rate: 0.9 + Math.random() * 0.2 });
-      // anticipation squash
-      tween(0.09, (k) => { frog.sx = 1 + 0.25 * k; frog.sy = 1 - 0.25 * k; }, () => {
+      // anticipation: crouch + turn towards the target
+      tween(0.11, (k) => { const q = ease.outCubic(k); F.body.scale.set(1 + 0.22 * q, 1 - 0.3 * q, 1 + 0.1 * q); frog.rotation.y = r0 + (face - r0) * q; }, () => {
+        if (y0 < 0.4) pond.ripple(x0, z0, 0.55);
         tween(dur, (k) => {
-          frog.x = lerp(fx0, toX, ease.inOut(k)); frog.y = lerp(fy0, toY, ease.inOut(k)); frog.z = Math.sin(k * Math.PI) * H;
-          const st = Math.sin(k * Math.PI); frog.sx = 1 - 0.18 * st; frog.sy = 1 + 0.28 * st; frog.rot = flip ? k * Math.PI * 2 : (toX - fx0) * 0.0015 * st;
-          if (!stage.low && Math.random() < 0.3) fx.burst(frog.x, frog.y - frog.z + frog.size * 0.3, { n: 1, color: "#d8fff0", speed: 30, size: 3, life: 0.4, grav: 0 });
+          const q = ease.inOut(k), s = Math.sin(k * Math.PI);
+          frog.position.set(lerp(x0, toX, q), lerp(y0, toY, q) + s * H, lerp(z0, toZ, q));
+          F.body.scale.set(1 - 0.16 * s, 1 + 0.3 * s, 1 - 0.1 * s);
+          F.body.rotation.x = flip ? k * Math.PI * 2 : 0.35 * Math.cos(k * Math.PI) * s;
+          legsPose(Math.min(1, s * 1.8));
+          pond.frogBase = lerp(y0, toY, q);
+          if (Math.random() < 0.6) pond.trail(frog.position.x, frog.position.y + 0.3, frog.position.z);
         }, () => {
-          frog.z = 0; frog.rot = 0;
-          ripples.push({ x: toX, y: toY + W.r * 0.2, t: 0 });
-          tween(0.18, (k) => { const s = Math.sin(k * Math.PI); frog.sx = 1 + 0.3 * s; frog.sy = 1 - 0.3 * s; }, () => { frog.sx = frog.sy = 1; frog.busy = false; c.jumping = false; res(); });
+          frog.position.y = toY; F.body.rotation.x = 0; legsPose(0); pond.frogBase = toY;
+          tween(0.2, (k) => { const s = Math.sin(k * Math.PI); F.body.scale.set(1 + 0.3 * s, 1 - 0.32 * s, 1 + 0.2 * s); }, () => { F.body.scale.set(1, 1, 1); F.busy = false; c.jumping = false; res(); });
         });
       });
     });
   }
+  function padBounce(p) { const y0 = p.position.y; tween(0.5, (k) => { p.position.y = y0 - Math.sin(k * Math.PI) * 0.12 * (1 - k); p.rotation.z = Math.sin(k * Math.PI * 3) * 0.05 * (1 - k); }, () => { p.position.y = y0; p.rotation.z = 0; }); pond.ripple(p.position.x, p.position.z, 0.9); }
+  function popIn(p, delay = 0) { p.visible = true; p.scale.setScalar(0.001); p.position.y = 0.1; setTimeout(() => tw.add(0.5, (k) => p.scale.setScalar(Math.max(0.001, k) * V.padScale), { ease: (t) => ease.outBack(t, 2.2) }), delay * 1000); setTimeout(() => pond.ripple(p.position.x, p.position.z, 0.7), delay * 1000); }
+  function sinkPad(p, dur = 0.6) { const y0 = p.position.y; return new Promise((r) => tween(dur, (k) => { p.position.y = y0 - k * 0.6; p.rotation.x = k * 0.35; p.scale.setScalar(Math.max(0.001, 1 - k * 0.4) * V.padScale); }, () => { p.visible = false; p.rotation.x = 0; p.scale.setScalar(V.padScale); r(); })); }
 
   // ---------- HUD ----------
   let lastShown = {};
@@ -112,10 +112,13 @@ export function startGame(host, { pack, wm = false, maker = false, studentId = "
     if (c.trial) $("#lf-timer").style.transform = `scaleX(${Math.max(0, c.trial.deadline - performance.now()) / (e.seconds * 1000)})`;
     const cb = $("#lf-combo"); if (c.streak >= 2) { cb.textContent = `🔥 ${c.streak} in a row!`; cb.classList.add("on"); } else cb.classList.remove("on");
   }
-  function placeWords() {
-    words.forEach((b, i) => { const p = pads[i]; b.style.left = p.x + "px"; b.style.top = p.y + p.r * 0.75 * p.scale + "px"; b.style.opacity = p.alive && p.scale > 0.5 ? String(Math.min(1, p.scale)) : "0"; b.style.transform = `translate(-50%,0) scale(${0.6 + 0.4 * Math.min(1, p.scale)})`; });
+  const fade = [1, 1, 1];
+  function placeWords() { // labels sit on the 3D pads (projected), same as the original's pad signs
+    words.forEach((b, i) => { const p = pads[i], s = p.visible ? p.scale.x : 0, q = pond.project(p.position.x, p.position.y + 0.25, p.position.z + 0.55);
+      b.style.left = q.x + "px"; b.style.top = q.y + "px"; b.style.opacity = s > 0.5 ? String(Math.min(1, s) * fade[i]) : "0"; b.style.transform = `translate(-50%,-30%) scale(${0.6 + 0.4 * Math.min(1, s)})`; });
   }
   function showPlay(on) { $("#lf-words").classList.toggle("hidden", !on); $("#lf-q").classList.toggle("hidden", !on); $("#lf-help").classList.toggle("hidden", !on || c.corrects > 0); }
+  const screenOf = (x, y, z) => pond.project(x, y, z);
 
   // ---------- loop logic (same as old engine) ----------
   function refill() { c.queue = shuffle(e.items.filter((L) => !c.roundDone[L.item_id])); }
@@ -126,17 +129,18 @@ export function startGame(host, { pack, wm = false, maker = false, studentId = "
     const Z = shuffle([L.correct, ...L.wrong.slice(0, 2)]);
     while (Z.length < 3) Z.push("");
     const ok = Z.indexOf(L.correct);
-    Z.forEach((K, i) => { words[i].textContent = K || "—"; words[i].dataset.answer = K || ""; words[i].setAttribute("aria-label", K || `pad ${i + 1}`); });
+    Z.forEach((K, i) => { words[i].textContent = K || "—"; words[i].dataset.answer = K || ""; words[i].setAttribute("aria-label", K || `pad ${i + 1}`); fade[i] = 1; });
     const q = $("#lf-qp"); q.textContent = L.question; $("#lf-q").classList.remove("pop"); void q.offsetWidth; $("#lf-q").classList.add("pop");
     showPlay(true);
-    home.sink = 0; home.alive = true;
-    W.shoreTarget = landNear() ? stage.h * 0.27 : -40;
-    pads.forEach((p, i) => { p.alive = true; p.sink = 0; p.scale = 0; p.glow = 0; tween(0.45 + i * 0.06, (k) => { p.scale = ease.outBack(k); }); });
+    home.visible = true; home.userData.sink = 0;
+    setShore();
+    placePads(); pads.forEach((p, i) => { p.userData.glowAmt = 0; popIn(p, i * 0.06); });
     audio.play("pop", { vol: 0.4, rate: 1.1 });
     c.trial = { item: L, choices: Z, correctLane: ok, startedAt: new Date().toISOString(), t0: performance.now(), deadline: performance.now() + e.seconds * 1000, locked: false };
     hudUpdate();
     audio.speak([`./audio/q/${/^[a-zA-Z0-9_-]+$/.test(L.item_id) ? L.item_id : "_"}.mp3`]);
   }
+  function setShore() { const on = landNear() && c.view !== "start"; pond.danger = on; if (on && !pond.shore.visible) { pond.shore.visible = true; pond.shore.position.set(0, -1.2, shoreZ() - 4); } if (on) { const y0 = pond.shore.position.y, z0 = pond.shore.position.z, z1 = shoreZ(); tween(0.9, (k) => { const q = ease.outCubic(k); pond.shore.position.y = lerp(y0, 0, q); pond.shore.position.z = lerp(z0, z1, q); }); } }
   function record(item, resp, correct, latency, timeout) {
     if (!c.studentId) return null;
     const r = rec({ student_id: c.studentId, session_id: c.sessionId, module_id: e.module_id, activity_id: e.activity_id, item_id: item.item_id, skill_tags: item.skill_tags || e.skill_tags, response: timeout ? "timeout" : resp, correct, latency_ms: Math.round(latency), points: c.points, errors: c.errors, started_at: c.trial.startedAt, ended_at: new Date().toISOString(), ui_locale: e.ui_locale, round: c.round });
@@ -147,23 +151,32 @@ export function startGame(host, { pack, wm = false, maker = false, studentId = "
   async function chomp() {
     toast(c.lives <= 0 ? "GAME OVER" : "CHOMP!", "bad");
     audio.play("buzz", { vol: 0.6 });
-    fish.on = true; fish.t = 0; fish.x = frog.x; fish.y = frog.y; fish.flip = frog.x > stage.w / 2;
-    await wait(420); audio.play("chomp", { vol: 0.9 }); fx.shake(16); fx.flash("#ff4060", 0.35); frog.visible = false;
-    fx.burst(frog.x, frog.y, { n: 26, color: ["#aef", "#fff", "#7cf"], speed: 300, size: 6 });
-    await wait(900); fish.on = false; await afterMiss();
+    // piranha leaps out of the water from the side and snaps the frog
+    const fish = pond.fish, J = fish.userData.jaw, fx0 = frog.position.x, fz = frog.position.z, side = fx0 > 0 ? 1 : -1, fy = frog.position.y;
+    fish.visible = true; fish.scale.set(-side * 1.3, 1.3, 1.3);
+    pond.splash(fx0 + side * 2.4, fz, false);
+    await new Promise((r) => tween(0.42, (k) => { const q = ease.outCubic(k); fish.position.set(lerp(fx0 + side * 2.4, fx0, q), lerp(-0.6, fy + 0.6, q) + Math.sin(k * Math.PI) * 0.8, fz + 0.2); fish.rotation.z = side * (0.6 - k * 0.6); J.rotation.x = 0; J.rotation.z = -side * 0.5 * Math.sin(k * Math.PI * 0.5); fish.lookAt && fish.quaternion.copy(pond.camera.quaternion); }, r));
+    audio.play("chomp", { vol: 0.9 }); fx.flash("#ff4060", 0.35); pond.shake(0.3); frog.visible = false;
+    tween(0.15, (k) => { J.rotation.z = -side * 0.5 * (1 - k); });
+    pond.splash(fx0, fz, true);
+    await new Promise((r) => tween(0.6, (k) => { fish.position.set(fx0 - side * k * 2.2, fy + 0.6 - k * 2.2 + Math.sin(k * Math.PI) * 0.6, fz + 0.2); fish.rotation.z = -side * k * 0.8; }, r));
+    fish.visible = false; pond.splash(fx0 - side * 2.2, fz, false);
+    await wait(500); await afterMiss();
   }
-  async function splash(x, y) {
+  async function splash(x, z) {
     toast(c.lives <= 0 ? "GAME OVER" : "SPLASH!", "bad");
     audio.play("splash", { vol: 0.9 }); audio.play("dunk", { vol: 0.6, delay: 0.08 });
-    fx.shake(10); fx.burst(x, y, { n: 34, color: ["#cff6ff", "#fff", "#8fe3ff"], speed: 360, size: 6, life: 0.9, grav: 700 });
-    ripples.push({ x, y, t: 0 }, { x, y, t: -0.2 });
-    frog.busy = true; tween(0.5, (k) => { frog.under = k; });
+    pond.splash(x, z, true);
+    F.busy = true; const y0 = frog.position.y;
+    tween(0.55, (k) => { frog.position.y = y0 - k * 1.1; F.body.rotation.x = -k * 0.6; F.body.scale.setScalar(Math.max(0.01, 1 - k * 0.35)); }, () => { frog.visible = false; });
+    setTimeout(() => pond.ripple(x, z, 0.8), 500);
     await wait(1350); await afterMiss();
   }
   async function afterMiss() {
     if (c.lives <= 0) return end({ dead: true });
-    home.alive = true; home.sink = 0; placeFrogHome(); frog.busy = false;
-    frog.sy = 0; tween(0.4, (k) => { frog.sy = frog.sx = ease.outBack(k); });
+    home.visible = true; home.position.y = 0.1; home.rotation.set(0, 0, 0); home.scale.setScalar(1.15 * V.padScale); placeFrogHome(); F.busy = false;
+    F.body.scale.setScalar(0.01); tween(0.45, (k) => F.body.scale.setScalar(Math.max(0.01, ease.outBack(k))));
+    pond.ripple(home.position.x, home.position.z, 0.8);
     nextTrial();
   }
   async function pick(lane, timeout) {
@@ -178,21 +191,25 @@ export function startGame(host, { pack, wm = false, maker = false, studentId = "
       const gain = 100 + Math.round(Math.max(0, e.seconds * 1000 - lat) / 12);
       c.points += gain; c.streak += 1; c.best = Math.max(c.best, c.streak);
       audio.play("croak", { vol: 0.9 }); audio.combo(c.streak);
-      const p = pads[lane]; p.glow = 1;
-      words.forEach((b, i) => { if (i !== lane) b.style.opacity = "0.25"; });
+      const p = pads[lane]; p.userData.glowAmt = 1;
+      fade.forEach((_, i) => { if (i !== lane) fade[i] = 0.25; });
       const last = remaining() === 0;
       await wait(180);
-      await hop(p.x, p.y - p.r * 0.1, { flip: true, height: 1.15 });
-      fx.burst(p.x, p.y - W.r * 0.4, { n: 22, color: ["#fff59e", "#ffd23f", "#9effa0", "#fff"], speed: 260, size: 5, life: 0.8, grav: 200 });
-      fx.float(p.x, p.y - W.r * 1.6, `+${gain}`, { color: "#fff59e", size: 34 });
-      if (c.streak >= 3) fx.float(p.x, p.y - W.r * 2.3, c.streak >= 5 ? "AMAZING!" : "GREAT!", { color: "#ff9fd0", size: 28 });
+      await hop(p.position.x, p.position.z, { toY: p.position.y + 0.06, flip: true, height: 1.15 });
+      padBounce(p);
+      pond.sparkle(p.position.x, 0.8, p.position.z);
+      const sp = screenOf(p.position.x, 1.4, p.position.z);
+      fx.float(sp.x, sp.y, `+${gain}`, { color: "#fff59e", size: 34 });
+      if (c.streak >= 3) fx.float(sp.x, sp.y - 46, c.streak >= 5 ? "AMAZING!" : "GREAT!", { color: "#ff9fd0", size: 28 });
       audio.play("sparkle", { vol: 0.5 });
       record(t.item, resp, true, lat, false); hudUpdate();
       c.trial = null; showPlay(false);
       if (last) {
-        W.shoreTarget = stage.h * 0.27;
-        await wait(300);
-        await hop(stage.w / 2, stage.h * 0.27 - 50, { height: 1.4, dur: 0.8 });
+        setShore();
+        pads.forEach((o, i) => { if (i !== lane) sinkPad(o, 0.5); });
+        await wait(500);
+        V.homeZ = shoreZ() - 1.4; // camera follows the frog onto land
+        await hop(0, shoreZ() - 1.4, { toY: 0.26, height: 1.4, dur: 0.8 });
         return winSnack();
       }
       await scrollForward(lane);
@@ -200,45 +217,42 @@ export function startGame(host, { pack, wm = false, maker = false, studentId = "
     } else if (timeout) {
       c.errors += 1; c.lives -= 1; c.streak = 0;
       record(t.item, resp, false, lat, true); hudUpdate(); showPlay(false);
-      landNear() ? chomp() : splash(frog.x, frog.y);
+      landNear() ? chomp() : splash(frog.position.x, frog.position.z);
     } else {
       c.errors += 1; c.lives -= 1; c.streak = 0;
       const p = pads[lane];
-      await hop(p.x, p.y - p.r * 0.1, {});
+      await hop(p.position.x, p.position.z, { toY: p.position.y + 0.06 });
       record(t.item, resp, false, lat, false); hudUpdate();
-      tween(0.5, (k) => { p.sink = k; }, () => { p.alive = false; });
-      words[lane].style.opacity = "0"; showPlay(false);
-      landNear() ? chomp() : splash(p.x, p.y);
+      fade[lane] = 0; showPlay(false);
+      sinkPad(p, 0.5);
+      landNear() ? chomp() : splash(p.position.x, p.position.z);
     }
   }
-  // camera "moves forward": the chosen pad slides down to become the new home pad
+  // camera dollies forward: the chosen pad drifts to the centre and becomes the new home pad
   function scrollForward(lane) {
     return new Promise((res) => {
-      const p = pads[lane], fy0 = frog.y, px0 = p.x, py0 = p.y;
+      const p = pads[lane], old = home, px0 = p.position.x;
       audio.play("whoosh", { vol: 0.25 });
-      const oldHomeY = home.y;
-      tween(0.55, (k) => {
-        const q = ease.inOut(k);
-        W.scroll = q * (W.homeY - W.padY);
-        p.x = lerp(px0, stage.w / 2, q); p.y = lerp(py0, W.homeY, q);
-        frog.x = p.x; frog.y = lerp(fy0, W.homeY - home.r * 0.1, q);
-        home.y = oldHomeY + q * stage.h * 0.4;
-        pads.forEach((o) => { if (o !== p) o.scale = Math.max(0, 1 - q * 1.6); });
-      }, () => {
-        W.scroll = 0; home.y = W.homeY; home.x = stage.w / 2; home.sink = 0;
-        layout(); res();
+      pads.forEach((o) => { if (o !== p) sinkPad(o, 0.45); });
+      sinkPad(old, 0.55);
+      V.homeZ = p.position.z; // camera eases after it (pond3d)
+      tween(0.6, (k) => { const q = ease.inOut(k); p.position.x = lerp(px0, 0, q); frog.position.x = p.position.x; frog.rotation.y = lerp(frog.rotation.y, Math.PI, q); }, () => {
+        // swap roles: chosen pad = new home; the old home object is recycled as an answer pad
+        pads[lane] = old; home = p; p.userData.glowAmt = 0; old.visible = false;
+        frog.rotation.y = Math.PI; pond.frogBase = frog.position.y;
+        res();
       });
     });
   }
   function roundDone() { c.trial = null; showPlay(false); toast(`Round ${c.round} done`, "ok"); return end(); }
   async function winSnack() {
-    // frog catches a fly on shore, then celebrates
+    // frog catches a fly on shore with its tongue, then celebrates
     c.view = "snack";
-    frog.tongue = 0; tween(0.25, (k) => { frog.tongue = Math.sin(k * Math.PI); });
+    tween(0.3, (k) => { F.tongue.scale.set(1, Math.max(0.001, Math.sin(k * Math.PI) * 0.9), 1); });
     audio.play("pop", { vol: 0.6, rate: 1.4 });
-    await wait(300);
-    fx.confetti(stage.w / 2, stage.h * 0.3, 90); fx.confetti(stage.w * 0.2, stage.h * 0.5, 40); fx.confetti(stage.w * 0.8, stage.h * 0.5, 40);
-    for (let i = 0; i < 3; i++) { await hop(stage.w / 2, frog.y, { height: 0.5, dur: 0.35 }); }
+    await wait(320);
+    pond.confetti(0, 1.5, frog.position.z, 110); pond.confetti(-2.5, 1, frog.position.z + 1, 50); pond.confetti(2.5, 1, frog.position.z + 1, 50);
+    for (let i = 0; i < 3; i++) { await hop(frog.position.x, frog.position.z, { toY: frog.position.y, height: 0.5, dur: 0.35 }); }
     end();
   }
   function end({ dead = false } = {}) {
@@ -257,7 +271,6 @@ export function startGame(host, { pack, wm = false, maker = false, studentId = "
       <button class="go" id="lf-again" type="button">Play again</button>`;
     card.querySelector("#lf-again").onclick = () => { $("#lf-fade").classList.add("on"); setTimeout(() => location.reload(), 300); };
   }
-  let toastT = 0;
   function toast(text, kind) { fx.float(stage.w / 2, stage.h * 0.42, text, { color: kind === "bad" ? "#ff8095" : "#9effa0", size: 54, life: 1.2 }); }
 
   // ---------- progress seeding (cloud rows only) ----------
@@ -281,7 +294,7 @@ export function startGame(host, { pack, wm = false, maker = false, studentId = "
     if (!wm) seed();
     refill();
     layout(); placeFrogHome();
-    frog.sy = 0; tween(0.5, (k) => { frog.sx = frog.sy = ease.outElastic(k); });
+    F.body.scale.setScalar(0.01); tween(0.6, (k) => F.body.scale.setScalar(Math.max(0.01, ease.outElastic(k))));
     if (!wm && c.corrects >= TARGET) return end();
     nextTrial(); hudUpdate();
   }
@@ -290,68 +303,50 @@ export function startGame(host, { pack, wm = false, maker = false, studentId = "
   if (wm) ready(studentId);
   else { authCb = (d) => ready(cleanId(d)); if (authSeen) authCb(authDetail); }
 
-  // ---------- input ----------
+  // ---------- input (pointer + keyboard, same mapping as the original) ----------
   $("#lf-words").addEventListener("click", (ev) => { const b = ev.target.closest(".pad-word"); if (b) { ev.stopPropagation(); audio.unlock(); pick(Number(b.dataset.lane), false); } });
+  const ray = new THREE.Raycaster(), ndc = new THREE.Vector2();
   createInput(host, {
     keys: { "1": "l", ArrowLeft: "l", "2": "c", ArrowUp: "c", "3": "r", ArrowRight: "r", Enter: "go", " ": "go" },
     onKey: (a) => { if (a === "go") { if (c.view === "start" && !goBtn.disabled) begin(); return; } if (c.view === "play") pick({ l: 0, c: 1, r: 2 }[a], false); },
-    onTap: (x, y) => {
+    onTap: (x, y) => { // tap a 3D pad (raycast), or anywhere near it
       if (c.view !== "play" || c.jumping || performance.now() < c.pickLockUntil) return;
-      let best = null, bd = 1e9;
-      pads.forEach((p, i) => { const d = Math.hypot((x - p.x) / p.r, (y - p.y) / (p.r * 0.7)); if (d < 1.35 && d < bd) { bd = d; best = i; } });
+      ndc.set((x / stage.w) * 2 - 1, -(y / stage.h) * 2 + 1); ray.setFromCamera(ndc, pond.camera);
+      let best = null;
+      const hits = ray.intersectObjects(pads.filter((p) => p.visible), true); if (hits.length) { let o = hits[0].object; while (o && !pads.includes(o)) o = o.parent; if (o) best = pads.indexOf(o); }
+      if (best == null) { let bd = 1e9; pads.forEach((p, i) => { const q = pond.project(p.position.x, p.position.y, p.position.z); const d = Math.hypot(x - q.x, y - q.y); if (d < Math.min(stage.w, stage.h) * 0.16 && d < bd) { bd = d; best = i; } }); }
       if (best != null) pick(best, false);
     },
   });
 
   // ---------- frame ----------
-  let blinkT = 2;
-  stage.run((dt, st) => {
-    const { g, w, h, t } = st;
-    for (let i = tweens.length - 1; i >= 0; i--) { const tw = tweens[i]; tw.t += dt; const k = Math.min(1, tw.t / tw.dur); tw.fn(k); if (k >= 1) { tweens.splice(i, 1); tw.done && tw.done(); } }
+  pond.onFrame = (dt) => {
     if (c.view === "play" && c.trial && !c.trial.locked) {
       const now = performance.now();
       if (now > c.trial.deadline) pick(null, true);
-      else { home.sink = clamp(1 - (c.trial.deadline - now) / (e.seconds * 1000), 0, 1); if (home.sink > 0.75 && Math.random() < dt * 6) ripples.push({ x: home.x + (Math.random() - 0.5) * home.r, y: home.y, t: 0 }); }
+      else { // home pad sinks with the timer
+        const s = clamp(1 - (c.trial.deadline - now) / (e.seconds * 1000), 0, 1); home.userData.sink = s;
+        home.position.y = 0.1 - s * 0.32; home.rotation.x = Math.sin(performance.now() / 300) * 0.04 * s;
+        if (!F.busy) { frog.position.y = home.position.y + 0.06; pond.frogBase = frog.position.y; }
+        if (s > 0.75 && Math.random() < dt * 6) pond.ripple(home.position.x + (Math.random() - 0.5) * 1.2, home.position.z + (Math.random() - 0.5) * 0.8, 0.5);
+      }
     }
-    W.shoreY = lerp(W.shoreY ?? -200, W.shoreTarget, Math.min(1, dt * 2.5));
-    blinkT -= dt; if (blinkT < 0) { frog.blink = Math.min(1, frog.blink + dt * 14); if (frog.blink >= 1) blinkT = 2 + Math.random() * 3; } else frog.blink = Math.max(0, frog.blink - dt * 10);
     fx.update(dt);
-
-    g.save(); fx.applyShake(g);
-    drawWater(g, w, h, t, st.low);
-    for (let i = ripples.length - 1; i >= 0; i--) { const r = ripples[i]; r.t += dt; if (r.t > 1.2) { ripples.splice(i, 1); continue; } if (r.t < 0) continue;
-      g.strokeStyle = `rgba(255,255,255,${0.5 * (1 - r.t / 1.2)})`; g.lineWidth = 3; g.beginPath(); g.ellipse(r.x, r.y, 10 + r.t * W.r * 1.4, (10 + r.t * W.r * 1.4) * 0.4, 0, 0, Math.PI * 2); g.stroke(); }
-    if (W.shoreY > -30) drawShore(g, w, W.shoreY, t);
-    decor.forEach((d) => drawPad(g, d.x * w, d.y * h, d.r * Math.min(w, h), { hue: d.h, t, flower: d.f }));
-    drawReeds(g, w, h, t);
-    if (!st.low) { const vg = g.createRadialGradient(w / 2, h / 2, Math.min(w, h) * 0.35, w / 2, h / 2, Math.max(w, h) * 0.75); vg.addColorStop(0, "rgba(0,0,0,0)"); vg.addColorStop(1, "rgba(0,20,40,.35)"); g.fillStyle = vg; g.fillRect(0, 0, w, h); }
-    // home pad (sinks with the timer)
-    if (home.alive) drawPad(g, home.x, home.y + W.scroll * 0, home.r, { sink: home.sink, hue: home.hue, t, flower: true });
-    pads.forEach((p, i) => { if (p.scale <= 0.01 || (!p.alive && p.sink >= 1)) return;
-      const bob = Math.sin(t * 2 + p.bob) * 3; drawPad(g, p.x, p.y + bob, p.r * p.scale, { sink: p.sink, glow: p.glow, hue: p.hue, t }); });
-    // fireflies / flies circling
-    if (!st.low) flies.forEach((f, i) => { f.a += dt * (0.8 + i * 0.2); drawFly(g, w / 2 + Math.cos(f.a) * w * 0.35, h * 0.2 + Math.sin(f.a * 1.3) * h * 0.08 + Math.max(0, W.shoreY) * 0.3, t); });
-    if (frog.visible) {
-      if (frog.under > 0) { g.save(); g.globalAlpha = 1 - frog.under; drawFrog(g, { ...frog, y: frog.y + frog.under * 20, sy: frog.sy * (1 - frog.under * 0.6) }, t); g.restore(); }
-      else drawFrog(g, frog, t);
-    }
-    if (fish.on) { fish.t += dt; const k = Math.min(1, fish.t / 0.9), arc = Math.sin(k * Math.PI);
-      drawPiranha(g, fish.x + (fish.flip ? 1 : -1) * (1 - k * 2) * W.r * 1.6, fish.y - arc * W.r * 1.8, W.r / 50, Math.abs(Math.sin(fish.t * 10)), fish.flip);
-      if (Math.random() < 0.5) fx.burst(fish.x, fish.y, { n: 2, color: "#cff6ff", speed: 120, size: 4, life: 0.5 }); }
-    fx.draw(g);
-    g.restore();
-    fx.drawFlash(g, w, h);
+    const g = stage.g; g.clearRect(0, 0, stage.w, stage.h); fx.draw(g); fx.drawFlash(g, stage.w, stage.h);
     if (c.view === "play" || c.view === "snack") { hudUpdate(); placeWords(); }
-  });
-  layout(); hudUpdate();
+  };
+  stage.run(() => {}); // overlay clock only (drawing happens in pond.onFrame)
+  pond.run();
+  placePads(); pads.forEach((p) => (p.visible = false)); home.position.set(0, 0.1, V.homeZ); home.scale.setScalar(1.15 * V.padScale); placeFrogHome(); hudUpdate();
 
   const api = {
-    version: "3.0.0",
+    version: "3.1.0",
     getState() {
-      return { student_id: c.studentId, session_id: c.sessionId, pack_id: e.pack_id, view: c.view, points: c.points, errors: c.errors, lives: c.lives, round: c.round, corrects: c.corrects, remaining: remaining(), total: target(), pack_items: e.items.length, current_item: c.trial ? c.trial.item.item_id : null, hops_left: remaining(), land: landNear(), win_corrects: target(), streak: c.streak, correct_lane: c.trial && !c.trial.locked && !c.jumping ? c.trial.correctLane : null, low_quality: stage.low, rule: wm ? "wm:all-items" : "fixed-5", embed_student: wm ? "url-student" : "" };
+      return { student_id: c.studentId, session_id: c.sessionId, pack_id: e.pack_id, view: c.view, points: c.points, errors: c.errors, lives: c.lives, round: c.round, corrects: c.corrects, remaining: remaining(), total: target(), pack_items: e.items.length, current_item: c.trial ? c.trial.item.item_id : null, hops_left: remaining(), land: landNear(), win_corrects: target(), streak: c.streak, correct_lane: c.trial && !c.trial.locked && !c.jumping ? c.trial.correctLane : null, low_quality: pond.low, quality: pond.stage.quality, fps: Math.round(pond.stage.fps), frog: { x: frog.position.x, y: frog.position.y, z: frog.position.z }, rule: wm ? "wm:all-items" : "fixed-5", embed_student: wm ? "url-student" : "" };
     },
     getRecords: () => c.records.slice(),
     loadPack(L) { e = L; c.pack = L; c.roundDone = {}; refill(); $("#lf-goal").textContent = `Loaded ${L.title} · ${L.items.length} questions. Get ${target()} right to reach land.`; },
+    padScreen: (i) => { const p = pads[i]; return pond.project(p.position.x, p.position.y, p.position.z - 0.35 * V.padScale); },
     begin,
   };
   window.MRJLeapFrog = api; window.LeapFrog = api;

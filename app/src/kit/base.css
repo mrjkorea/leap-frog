@@ -28,3 +28,6 @@ canvas.stage { position: absolute; inset: 0; display: block; }
 .combo.on { opacity: 1; animation: bump .35s; }
 .fade { position: absolute; inset: 0; background: #000; opacity: 0; pointer-events: none; transition: opacity .35s; z-index: 30; }
 .fade.on { opacity: 1; }
+canvas.stage3d { position: absolute; inset: 0; display: block; touch-action: none; }
+canvas.stage.overlay { pointer-events: none; z-index: 1; }
+.hud { z-index: 2; }

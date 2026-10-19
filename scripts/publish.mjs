@@ -75,5 +75,6 @@ if (wmDir) {
   const copy = (rel) => { fs.mkdirSync(path.dirname(path.join(wmDir, rel)), { recursive: true }); fs.copyFileSync(path.join(root, rel), path.join(wmDir, rel)); };
   for (const f of fs.readdirSync(path.join(root, "audio"))) if (/\.(mp3|txt)$/.test(f)) copy("audio/" + f);
   for (const f of fs.readdirSync(path.join(root, "audio/sfx"))) copy("audio/sfx/" + f);
+  for (const d of ["models", "textures"]) for (const f of fs.readdirSync(path.join(root, d))) copy(d + "/" + f);
 }
 console.log(`published ${js} ${css} -> ${outDir} (build ${build})`);
