@@ -5,7 +5,7 @@ frog-croak.wav
   https://commons.wikimedia.org/wiki/File:Single_Frog_Croak.oga
   Converted to mono WAV for web playback.
 
-splash-heavy.wav, splash-dunk.wav
+splash-heavy.mp3, splash-dunk.mp3 (originally .wav)
   Source: OpenGameArt — 40 CC0 water / splash / slime SFX (splash_01, splash_07)
   Author: rubberduck
   License: CC0

@@ -9,14 +9,11 @@ This pass checked every file needed to **play** on phone, tablet, classroom PC, 
 | Surface | Path | Live before this fix |
 | --- | --- | --- |
 | Shell | `index.html` | 200, relative `./assets/…` (Pages-safe) |
-| Engine | `assets/index-CjZdu9-4.js` | 200 |
-| CSS | `assets/index-CUDl5GZZ.css` | 200 |
+| Engine + CSS | `assets/index-*.js/.css` (3D v2, listed in `assets/.build-files.json`) | 200 |
 | Default pack | `packs/starter-en.json` | 200 (11 addition-word items, not hardcoded) |
 | Pack swap files | `packs/starter.csv`, `packs/starter.xlsx` | 200 |
-| Baked audio | `audio/frog-ribbit`, `splash-heavy`, `splash-dunk` (wav) | 200 |
-| Extra audio | `audio/frog-croak.wav` | 200, unused by engine |
+| Baked audio | `audio/frog-ribbit`, `splash-heavy`, `splash-dunk` (mp3) | 200 |
 | Piranha texture | `textures/piranha.png` | 200, loaded |
-| Flip texture | `textures/piranha-flip.png` | 200, unused |
 | HOW-TO-PLAY | `HOW-TO-PLAY.md` / `.html` | **404** |
 | TTS | `/api/tts`, `speechSynthesis` | not present (good) |
 
@@ -49,9 +46,10 @@ Gameplay already in the bundle (kept):
 
 ## Remaining gaps
 
-- `textures/piranha-flip.png` is not referenced (right-facing sheet is unused).
-- `audio/frog-croak.*` is credited/baked but the hop SFX uses `frog-ribbit`.
 - Pack field `mastery_correct: 3` is parsed and ignored; win is engine `Ta = 5` (same as the start-card copy). Changing that would change gameplay, so it was left.
 - `starter.csv` / `starter.xlsx` are a different (grammar) list from `starter-en.json` (math words). That is useful for pack-swap tests, not a 404.
 - No favicon (`/favicon.ico` 404). Does not block play.
 - GitHub Pages still has to rebuild `main` after this branch is merged.
+
+
+_2026-10-19 cleanup: removed the pre-3D bundle, all .wav copies (the game loads the .mp3s), the unused frog-croak clip and piranha-flip.png._
