@@ -2,6 +2,7 @@
 // three answer pads ahead (left / centre / right), sunset sky, reeds, piranhas, shore when land is near.
 // Kenney Nature Kit models (CC0) for banks, plants, trees, rocks, deco lilies. Frog + pads are procedural.
 import { THREE, createStage3D, loadModel, fit, shadowAll, glowTexture, createParticles3D, createTweens } from "./kit/three-stage.js";
+const lerp = (a, b, k) => a + (b - a) * k;
 
 const M = (n) => `./models/${n}.glb`;
 const std = (color, o = {}) => new THREE.MeshStandardMaterial({ color, roughness: 0.6, metalness: 0, ...o });
@@ -162,7 +163,7 @@ export async function createPond3D(host, { quality } = {}) {
   { const cyl = new THREE.CylinderGeometry(1, 1, 0.5, 64);
     const sand = new THREE.Mesh(cyl, std(0xe6cf94, { roughness: 0.95 })); sand.scale.set(13, 1, 2.6); sand.position.set(0, 0.0, -1.7); sand.receiveShadow = true;
     const grass = new THREE.Mesh(cyl, std(0x5cb84a, { roughness: 0.9 })); grass.scale.set(14, 1.2, 4.2); grass.position.set(0, 0.22, -4.6); grass.receiveShadow = true; shore.add(sand, grass);
-    [["tree_oak", 3.6, -3.2, -5], ["tree_default", 3.2, 3.6, -5.6], ["tree_fat", 2.8, -6.4, -4.2], ["tree_oak", 3.4, 6.8, -4.6], ["plant_bushLarge", 1.4, -1.8, -2.2], ["plant_bush", 1.1, 2.2, -2.0], ["mushroom_redGroup", 0.7, 1.1, -1.4], ["stump_round", 0.8, -4.2, -1.6], ["flower_redA", 0.5, -0.7, -1.2], ["flower_yellowA", 0.5, 0.6, -1.0], ["flower_purpleA", 0.5, -1.2, -0.9], ["rock_smallC", 0.7, 4.4, 0.4], ["rock_largeA", 1.2, -5.6, 0.6]]
+    [["tree_oak", 4.2, -3.2, -6], ["tree_default", 3.8, 3.6, -6.4], ["tree_fat", 3.4, -6.4, -5.2], ["tree_oak", 4, 6.8, -5.6], ["plant_bushLarge", 1.0, -2.6, -2.6], ["plant_bush", 0.8, 2.6, -2.4], ["mushroom_redGroup", 0.5, 1.4, -1.6], ["stump_round", 0.6, -4.2, -1.6], ["flower_redA", 0.5, -0.7, -1.2], ["flower_yellowA", 0.5, 0.6, -1.0], ["flower_purpleA", 0.5, -1.2, -0.9], ["rock_smallC", 0.5, 4.4, 0.4], ["rock_largeA", 0.9, -5.6, 0.6]]
       .forEach(([n, s, x, z]) => { const o = clone(n, s); o.position.set(x, 0.25 + (z < -1.8 ? 0.27 : 0), z - 1.2); o.rotation.y = Math.random() * 6; shore.add(o); }); }
 
   // fireflies + dragonfly
@@ -184,7 +185,7 @@ export async function createPond3D(host, { quality } = {}) {
   const oldPads = [];
 
   // ---- layout / camera ----
-  const V = { lane: 2.6, padScale: 1, gap: 3.6, homeZ: 0, camZ: 0, portrait: false, shake: 0, followX: 0 };
+  const V = { lane: 2.6, padScale: 1, gap: 3.6, homeZ: 0, camZ: 0, portrait: false, shake: 0, followX: 0, win: 0, winK: 0 };
   function layout() {
     V.portrait = S3.w / S3.h < 0.82; V.lane = V.portrait ? 1.62 : 2.6; V.padScale = V.portrait ? 0.7 : 1; camera.fov = V.portrait ? 66 : S3.w / S3.h < 1.15 ? 52 : 44; camera.updateProjectionMatrix();
     parts.setScale(S3.h / (2 * Math.tan(THREE.MathUtils.degToRad(camera.fov / 2))));
@@ -200,8 +201,9 @@ export async function createPond3D(host, { quality } = {}) {
     // camera eases after the home pad (smooth dolly forward + slight sway), shake on splashes/chomps
     V.camZ += (V.homeZ - V.camZ) * (1 - Math.exp(-3.2 * dt));
     const cz = V.camZ, P = V.portrait;
-    camera.position.set(Math.sin(t * 0.35) * 0.18 + (Math.random() - 0.5) * V.shake, (P ? 7.6 : 4.9) + Math.sin(t * 0.5) * 0.06 + (Math.random() - 0.5) * V.shake, cz + (P ? 3.6 : 4.7));
-    camera.lookAt(0, 0, cz - (P ? 2.4 : 2.1));
+    V.winK += (V.win - V.winK) * (1 - Math.exp(-2.2 * dt)); const W = V.winK; // win: swoop low behind the frog on the shore
+    camera.position.set(Math.sin(t * 0.35) * 0.18 + (Math.random() - 0.5) * V.shake, lerp(P ? 7.6 : 4.9, P ? 3.4 : 2.5, W) + Math.sin(t * 0.5) * 0.06 + (Math.random() - 0.5) * V.shake, cz + lerp(P ? 3.6 : 4.7, P ? 4.2 : 3.9, W));
+    camera.lookAt(0, lerp(0, 0.75, W), cz - lerp(P ? 2.4 : 2.1, 0.2, W));
     V.shake *= Math.pow(0.004, dt); if (V.shake < 0.003) V.shake = 0;
     water.position.z = cz - 30; water.material.uniforms.uCam.value.copy(camera.position);
     sky.position.set(0, 0, cz); sun.position.set(-26, 22, cz - 70); water.material.uniforms.uSun.value.set(-0.35, 0.45, -1);

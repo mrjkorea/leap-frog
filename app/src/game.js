@@ -63,7 +63,7 @@ export async function startGame(host, { pack, wm = false, maker = false, student
   const F = frog.userData;
   let home = pond.home; const pads = pond.pads;
   const padZ = () => V.homeZ - V.gap;
-  const shoreZ = () => padZ() - V.gap + 0.6;
+  const shoreZ = () => padZ() - 2.4;
   function placePads() { const L = pond.lanes(); pads.forEach((p, i) => { p.position.set(L[i], 0.1, padZ()); }); }
   function layout() { if (!F.busy && !c.jumping) { placePads(); placeFrogHome(); } }
   pond.onResize = layout;
@@ -208,8 +208,8 @@ export async function startGame(host, { pack, wm = false, maker = false, student
         setShore();
         pads.forEach((o, i) => { if (i !== lane) sinkPad(o, 0.5); });
         await wait(500);
-        V.homeZ = shoreZ() - 1.4; // camera follows the frog onto land
-        await hop(0, shoreZ() - 1.4, { toY: 0.26, height: 1.4, dur: 0.8 });
+        V.homeZ = shoreZ() - 1.0; V.win = 1; // camera swoops low after the frog onto land
+        await hop(0, shoreZ() - 1.2, { toY: 0.26, height: 1.4, dur: 0.8 });
         return winSnack();
       }
       await scrollForward(lane);
@@ -337,7 +337,7 @@ export async function startGame(host, { pack, wm = false, maker = false, student
   };
   stage.run(() => {}); // overlay clock only (drawing happens in pond.onFrame)
   pond.run();
-  placePads(); pads.forEach((p) => (p.visible = false)); home.position.set(0, 0.1, V.homeZ); home.scale.setScalar(1.15 * V.padScale); placeFrogHome(); hudUpdate();
+  V.win = 0; placePads(); pads.forEach((p) => (p.visible = false)); home.position.set(0, 0.1, V.homeZ); home.scale.setScalar(1.15 * V.padScale); placeFrogHome(); hudUpdate();
 
   const api = {
     version: "3.1.0",
