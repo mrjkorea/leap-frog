@@ -12,3 +12,9 @@
 @keyframes float { 50% { transform: translateY(-8px) rotate(-4deg); } }
 .card .small { font-size: 15px; }
 .stars { color: var(--gold); text-shadow: 0 2px 0 #c58f00; } .stars .dim { color: #ddd; text-shadow: none; }
+
+/* How to Play panel (start card) */
+.mrj-h2p { text-align: left; margin: 6px 0 10px; } .mrj-h2p h2 { margin: 0 0 6px; text-align: center; font-size: 18px; letter-spacing: .12em; }
+.mrj-h2p-list { list-style: none; margin: 0 0 8px; padding: 0; font-size: 15px; line-height: 1.5; } .mrj-h2p .ic { display: inline-block; width: 1.7em; }
+.mrj-h2p-ctl { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; } .mrj-h2p .ctl { background: rgba(127,127,127,.14); border-radius: 12px; padding: 8px; display: flex; flex-direction: column; gap: 3px; font-size: 13px; }
+.mrj-h2p .ctl b { font-size: 14px; } .mrj-h2p kbd { display: inline-block; min-width: 1.6em; padding: 0 5px; margin-right: 3px; border: 1px solid currentColor; border-radius: 5px; font: 700 12px system-ui, sans-serif; text-align: center; }
