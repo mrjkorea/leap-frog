@@ -40,7 +40,7 @@ export async function startGame(host, { pack, wm = false, maker = false, student
     <div class="words hidden" id="lf-words">${[0, 1, 2].map((i) => `<button class="pad-word" data-lane="${i}" type="button"></button>`).join("")}</div>
     <div class="help hidden" id="lf-help">Tap a lily pad · keys 1 2 3 / ← ↑ →</div>
     <div class="card" id="lf-start"><div class="logo">🐸</div><h1>Leap Frog</h1>
-      <p class="lead">Read the question. Hop to the lily pad with the right answer!</p>
+      <div class="mrj-h2p" id="mrj-h2p"><h2>HOW TO PLAY</h2><ul class="mrj-h2p-list"><li><span class="ic">📖</span>Read the question.</li><li><span class="ic">🪷</span>Hop to the lily pad with the right answer.</li><li><span class="ic">⏱️</span>Be quick! Your lily pad sinks.</li><li><span class="ic">❤️</span>3 lives. Reach the land to win!</li></ul><div class="mrj-h2p-ctl"><div class="ctl"><b>💻 Computer</b><span><kbd>←</kbd><kbd>↑</kbd><kbd>→</kbd> or <kbd>1</kbd><kbd>2</kbd><kbd>3</kbd> hop</span><span>🖱️ Click a lily pad</span></div><div class="ctl"><b>📱 Touch</b><span>👆 Tap a lily pad</span><span>👆 or tap a word button</span></div></div></div>
       <p class="lead small" id="lf-goal">${wm ? "Get every word right to reach land." : `Get ${TARGET} right to reach land.`} 3 lives.</p>
       <button class="go" type="button" disabled>Sign in to play</button>
       <label class="drop${maker && !wm ? "" : " hidden"}" id="lf-drop">Drop Excel / CSV / JSON pack here<input id="lf-file" type="file" accept=".xlsx,.xls,.csv,.json" hidden /></label>
@@ -259,6 +259,7 @@ export async function startGame(host, { pack, wm = false, maker = false, student
     if (!wm) mrjPostRound(e, c, dead, TARGET);
     else if (!dead) wmDone(c, e);
     c.view = "end"; c.trial = null; showPlay(false);
+    audio.stopMusic(); setTimeout(() => { if (c.view === "end") audio.stopAll(); }, 2500); // run end: music off, then AudioContext suspended
     if (dead) { audio.play("lose", { vol: 0.7 }); } else { audio.play("fanfare", { vol: 0.8 }); }
     const acc = c.records.length ? Math.round(c.records.filter((K) => K.correct).length / c.records.length * 100) : 0;
     const stars = dead ? 0 : c.lives >= 3 ? 3 : c.lives === 2 ? 2 : 1;
@@ -349,6 +350,11 @@ export async function startGame(host, { pack, wm = false, maker = false, student
     padScreen: (i) => { const p = pads[i]; return pond.project(p.position.x, p.position.y, p.position.z - 0.35 * V.padScale); },
     begin,
   };
+  // Word Master close / tab hidden / page unload: stop all sound
+  const mrjHardStop = () => { audio.stopAll(); };
+  window.addEventListener("message", (ev) => { const d = ev.data; if (d === "mrj-stop" || (d && d.type === "mrj-stop")) mrjHardStop(); });
+  window.addEventListener("pagehide", mrjHardStop);
+  document.addEventListener("visibilitychange", () => { if (document.hidden) mrjHardStop(); else if (c.view === "play") { audio.unlock(); audio.startMusic(); } });
   window.MRJLeapFrog = api; window.LeapFrog = api;
   return api;
 }

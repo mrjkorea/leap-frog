@@ -74,12 +74,15 @@ export function createAudio({ sfx = {}, music = null, musicVol = 0.3 } = {}) {
     }
     return false;
   }
+  // hard stop: music + loops off, AudioContext suspended (the next unlock() inside a tap resumes it)
+  function stopMusic() { wantMusic = false; try { musicSrc && musicSrc.stop(); } catch (e) {} try { musicSrc && musicSrc.disconnect(); } catch (e) {} musicSrc = null; }
+  function stopAll() { stopMusic(); if (ctx && ctx.state === "running") ctx.suspend().catch(() => {}); }
   function setMuted(m) {
     muted = !!m;
     if (ctx) { master.gain.setTargetAtTime(muted ? 0 : 0.9, ctx.currentTime, 0.05); if (!muted && musicSrc) musicBus.gain.setTargetAtTime(musicVol, ctx.currentTime, 0.3); }
     return muted;
   }
   // pause audio when app is backgrounded (tab hidden / mobile app paused)
-  document.addEventListener("visibilitychange", () => { if (!ctx) return; document.hidden ? ctx.suspend().catch(() => {}) : unlocked && ctx.resume().catch(() => {}); });
-  return { unlock, play, tone, combo, speak, startMusic, setMuted, isMuted: () => muted, ready: () => loading };
+  document.addEventListener("visibilitychange", () => { if (!ctx) return; document.hidden ? ctx.suspend().catch(() => {}) : unlocked && wantMusic && ctx.resume().catch(() => {}); });
+  return { unlock, play, tone, combo, speak, startMusic, stopMusic, stopAll, state: () => (ctx ? ctx.state : "none"), setMuted, isMuted: () => muted, ready: () => loading };
 }
