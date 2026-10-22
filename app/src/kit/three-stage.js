@@ -6,6 +6,7 @@ import { EffectComposer } from "three/examples/jsm/postprocessing/EffectComposer
 import { RenderPass } from "three/examples/jsm/postprocessing/RenderPass.js";
 import { UnrealBloomPass } from "three/examples/jsm/postprocessing/UnrealBloomPass.js";
 import { OutputPass } from "three/examples/jsm/postprocessing/OutputPass.js";
+import { makeRenderer, guardContext } from "./gl-guard.js";
 export { THREE };
 
 export function createStage3D(host, { quality, bloom = { strength: 0.8, radius: 0.5, threshold: 0.78 }, shadows = true, fov = 45, clear = 0x000000 } = {}) {
@@ -14,7 +15,7 @@ export function createStage3D(host, { quality, bloom = { strength: 0.8, radius: 
   let level = forced === "low" ? 1 : forced === "high" ? 0 : 0;
   const coarse = window.matchMedia && matchMedia("(pointer: coarse)").matches;
   if (!forced && coarse && (navigator.hardwareConcurrency || 4) <= 4) level = 1;
-  const renderer = new THREE.WebGLRenderer({ antialias: level === 0, powerPreference: "high-performance", alpha: false });
+  const renderer = makeRenderer(THREE, { antialias: level === 0, powerPreference: "high-performance", alpha: false }); // retries safer settings, clear error if no WebGL
   renderer.setClearColor(clear, 1);
   renderer.outputColorSpace = THREE.SRGBColorSpace;
   renderer.toneMapping = THREE.ACESFilmicToneMapping; renderer.toneMappingExposure = 1.05;
@@ -48,11 +49,13 @@ export function createStage3D(host, { quality, bloom = { strength: 0.8, radius: 
     composer && composer.setSize(st.w, st.h); bloomPass && bloomPass.setSize(st.w, st.h);
     st.onResize && st.onResize(st);
   }
+  // GPU dropped the context: pause drawing + message; on restore continue in low quality (no more blank screen)
+  st.gl = guardContext(renderer, host, { onRestored: () => { if (!forced && level < 1) level = 1; applyLevel(); } });
   window.addEventListener("resize", resize);
   if (window.ResizeObserver) new ResizeObserver(resize).observe(host);
   applyLevel();
   st.setBloom = (s) => { if (bloomPass) bloomPass.strength = s; };
-  st.render = () => (composer ? composer.render() : renderer.render(scene, camera));
+  st.render = () => { if (st.gl.lost) return; composer ? composer.render() : renderer.render(scene, camera); };
   let frames = 0, acc = 0, slow = 0, warm = 0;
   // advance clocks + auto quality, then draw. Call once per frame (from your own loop) or use st.run().
   st.step = (dt, frame) => {
