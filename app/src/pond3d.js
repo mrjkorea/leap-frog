@@ -117,7 +117,7 @@ export async function createPond3D(host, { quality } = {}) {
     uniforms: { uTop: { value: new THREE.Color(0x3a7fc0) }, uMid: { value: new THREE.Color(0xf6c58a) }, uBot: { value: new THREE.Color(0xa9d4d6) } },
     vertexShader: "varying vec3 vP; void main(){ vP = position; gl_Position = projectionMatrix * modelViewMatrix * vec4(position,1.); }",
     fragmentShader: "varying vec3 vP; uniform vec3 uTop; uniform vec3 uMid; uniform vec3 uBot; void main(){ float h = normalize(vP).y; vec3 c = h>0.06 ? mix(uMid,uTop,smoothstep(.06,.55,h)) : mix(uBot,uMid,smoothstep(-.1,.06,h)); gl_FragColor = vec4(c,1.); }" }));
-  scene.add(sky);
+  scene.add(sky); scene.userData.softSky = ["#3a7fc0", "#9cc3d6", "#f6c58a", "#a9d4d6"]; // 2D-canvas fallback sky
   const sun = new THREE.Sprite(new THREE.SpriteMaterial({ map: glow, color: 0xffe2a0, transparent: true, depthWrite: false, fog: false, blending: THREE.AdditiveBlending })); sun.scale.setScalar(26); scene.add(sun);
   const clouds = [];
   for (let i = 0; i < 7; i++) { const c = new THREE.Mesh(new THREE.SphereGeometry(1.6 + Math.random(), 12, 8), new THREE.MeshStandardMaterial({ color: 0xfff1de, roughness: 1, transparent: true, opacity: 0.55, fog: false })); c.scale.set(3.2, 0.55, 1.4); c.position.set((i - 3) * 11, 14 + (i % 2) * 2, -60 - (i % 3) * 6); scene.add(c); clouds.push(c); }
@@ -133,7 +133,7 @@ export async function createPond3D(host, { quality } = {}) {
   const rip = Array.from({ length: 8 }, () => new THREE.Vector4(0, 0, -99, 0)); let ripI = 0;
   const water = new THREE.Mesh(new THREE.PlaneGeometry(90, 160, 1, 1), new THREE.ShaderMaterial({ vertexShader: WATER_V, fragmentShader: WATER_F, fog: false,
     uniforms: { uT: { value: 0 }, uDeep: { value: new THREE.Color(0x0a4a66) }, uShallow: { value: new THREE.Color(0x1f8290) }, uSky: { value: new THREE.Color(0xbfe6f0) }, uSun: { value: new THREE.Vector3(-6, 10, -14) }, uSunCol: { value: new THREE.Color(0xfff0c8) }, uRip: { value: rip }, uFog: { value: FOG }, uFogN: { value: 26 }, uFogF: { value: 62 }, uCam: { value: new THREE.Vector3() }, uHi: { value: 1 } } }));
-  water.rotation.x = -Math.PI / 2; scene.add(water);
+  water.rotation.x = -Math.PI / 2; scene.add(water); water.material.userData.softColor = 0x16708a; water.material.userData.softBack = true; // 2D-canvas fallback water
   function ripple(x, z, s = 1) { const r = rip[ripI++ % 8]; r.set(x, z, water.material.uniforms.uT.value, s); ringMesh(x, z, s); }
   const rings = [];
   function ringMesh(x, z, s) { const m = new THREE.Mesh(new THREE.RingGeometry(0.85, 1, 48), new THREE.MeshBasicMaterial({ color: 0xe8fbff, transparent: true, opacity: 0.4, depthWrite: false })); m.rotation.x = -Math.PI / 2; m.position.set(x, 0.02, z); scene.add(m); tw.add(1.3, (k) => { m.scale.setScalar(0.3 + k * 2.2 * s); m.material.opacity = 0.4 * (1 - k); }, { done: () => { scene.remove(m); m.geometry.dispose(); m.material.dispose(); } }); }

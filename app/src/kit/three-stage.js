@@ -6,7 +6,7 @@ import { EffectComposer } from "three/examples/jsm/postprocessing/EffectComposer
 import { RenderPass } from "three/examples/jsm/postprocessing/RenderPass.js";
 import { UnrealBloomPass } from "three/examples/jsm/postprocessing/UnrealBloomPass.js";
 import { OutputPass } from "three/examples/jsm/postprocessing/OutputPass.js";
-import { makeRenderer, guardContext } from "./gl-guard.js";
+import { makeRenderer, guardContext, SoftRenderer, clearGlMsg } from "./gl-guard.js";
 export { THREE };
 
 export function createStage3D(host, { quality, bloom = { strength: 0.8, radius: 0.5, threshold: 0.78 }, shadows = true, fov = 45, clear = 0x000000 } = {}) {
@@ -15,7 +15,10 @@ export function createStage3D(host, { quality, bloom = { strength: 0.8, radius: 
   let level = forced === "low" ? 1 : forced === "high" ? 0 : 0;
   const coarse = window.matchMedia && matchMedia("(pointer: coarse)").matches;
   if (!forced && coarse && (navigator.hardwareConcurrency || 4) <= 4) level = 1;
-  const renderer = makeRenderer(THREE, { antialias: level === 0, powerPreference: "high-performance", alpha: false }); // retries safer settings, clear error if no WebGL
+  let renderer = makeRenderer(THREE, { antialias: level === 0, powerPreference: "high-performance", alpha: false }); // WebGL, or a 2D-canvas SoftRenderer if WebGL is missing
+  // weak / software GPU (SwiftShader, llvmpipe, Basic Render, old Intel HD) or no GPU: start in the lightest mode right away
+  let weak = !!renderer.mrjWeak, cap = renderer.isSoft ? 24 : weak ? 30 : 0;
+  if (weak && forced !== "high") level = 2;
   renderer.setClearColor(clear, 1);
   renderer.outputColorSpace = THREE.SRGBColorSpace;
   renderer.toneMapping = THREE.ACESFilmicToneMapping; renderer.toneMappingExposure = 1.05;
@@ -25,10 +28,10 @@ export function createStage3D(host, { quality, bloom = { strength: 0.8, radius: 
   const scene = new THREE.Scene();
   const camera = new THREE.PerspectiveCamera(fov, 1, 0.1, 400);
   let composer = null, bloomPass = null;
-  const st = { renderer, scene, camera, w: 1, h: 1, t: 0, fps: 60, get quality() { return qs[level]; }, get low() { return level > 0; }, onResize: null, onQuality: null };
+  const st = { get renderer() { return renderer; }, get gpu() { return renderer.mrjGpu || ""; }, get weak() { return weak; }, get soft() { return !!renderer.isSoft; }, get fpsCap() { return cap; }, scene, camera, w: 1, h: 1, t: 0, fps: 60, get quality() { return qs[level]; }, get low() { return level > 0; }, onResize: null, onQuality: null };
   function buildComposer() {
     composer = null; bloomPass = null;
-    if (level > 0 || !bloom) return;
+    if (level > 0 || !bloom || renderer.isSoft) return;
     try {
       composer = new EffectComposer(renderer);
       composer.addPass(new RenderPass(scene, camera));
@@ -37,7 +40,7 @@ export function createStage3D(host, { quality, bloom = { strength: 0.8, radius: 
     } catch (e) { composer = null; }
   }
   function applyLevel() {
-    renderer.setPixelRatio(Math.min(window.devicePixelRatio || 1, [1.75, 1, 0.75][level]));
+    renderer.setPixelRatio(Math.min(window.devicePixelRatio || 1, [1.75, 1, weak ? 0.6 : 0.75][level]));
     renderer.shadowMap.enabled = shadows && level < 2;
     scene.traverse((o) => { if (o.material) [].concat(o.material).forEach((m) => (m.needsUpdate = true)); });
     buildComposer(); resize(); st.onQuality && st.onQuality(qs[level]);
@@ -50,21 +53,30 @@ export function createStage3D(host, { quality, bloom = { strength: 0.8, radius: 
     st.onResize && st.onResize(st);
   }
   // GPU dropped the context: pause drawing + message; on restore continue in low quality (no more blank screen)
-  st.gl = guardContext(renderer, host, { onRestored: () => { if (!forced && level < 1) level = 1; applyLevel(); } });
+  // GPU dropped the context: restore -> low quality; never restored / lost again -> switch to the 2D-canvas renderer (same scene)
+  function toSoft() {
+    const old = renderer.domElement, soft = new SoftRenderer(); soft.mrjGpu = "canvas2d"; soft.mrjWeak = true;
+    soft.domElement.className = old.className; soft.setClearColor(renderer.getClearColor ? renderer.getClearColor(new THREE.Color()) : clear);
+    old.replaceWith(soft.domElement); try { renderer.dispose(); } catch (e) { /* ignore */ }
+    renderer = soft; weak = true; cap = 24; level = 2; st.gl = { lost: false, count: 0 }; clearGlMsg(host); applyLevel();
+  }
+  st.gl = guardContext(renderer, host, { onRestored: () => { if (!forced && level < 1) level = 1; applyLevel(); }, onFallback: toSoft });
   window.addEventListener("resize", resize);
   if (window.ResizeObserver) new ResizeObserver(resize).observe(host);
   applyLevel();
   st.setBloom = (s) => { if (bloomPass) bloomPass.strength = s; };
-  st.render = () => { if (st.gl.lost) return; composer ? composer.render() : renderer.render(scene, camera); };
+  let lastDraw = 0, drawN = 0;
+  st.render = () => { if (st.gl.lost) return; if (cap) { const now = performance.now(); if (now - lastDraw < 1000 / cap - 4) return; lastDraw = now; } drawN++; composer ? composer.render() : renderer.render(scene, camera); };
   let frames = 0, acc = 0, slow = 0, warm = 0;
   // advance clocks + auto quality, then draw. Call once per frame (from your own loop) or use st.run().
   st.step = (dt, frame) => {
     st.t += dt; frames++; acc += dt; warm += dt;
-    if (acc >= 1) { st.fps = frames / acc; frames = 0; acc = 0;
-      if (!forced && warm > 3 && level < 2) { const lim = level === 0 ? 42 : 28; slow = st.fps < lim ? slow + 1 : 0; if (slow >= 3) { slow = 0; level++; applyLevel(); } } }
+    if (acc >= 1) { st.fps = frames / acc; st.drawFps = drawN / acc; drawN = 0; frames = 0; acc = 0;
+      if (!forced && warm > 1.5 && level < 2) { const lim = level === 0 ? 42 : 28; slow = st.fps < lim ? slow + 1 : 0; if (slow >= 2) { slow = 0; level++; applyLevel(); } } }
     frame && frame(dt, st); st.render();
   };
   st.run = (frame) => { let last = performance.now(); const loop = (now) => { const dt = Math.min(0.05, Math.max(0, (now - last) / 1000)); last = now; st.step(dt, frame); requestAnimationFrame(loop); }; requestAnimationFrame(loop); };
+  window.MRJ_STAGE3D = st; // read-only diagnostics (quality / fps / gpu) for tests
   return st;
 }
 
