@@ -13,6 +13,7 @@ import { shuffle } from "./pack.js";
 import { mrjPost, mrjPostRound, passedMap, wmDone } from "./report.js";
 import { createPond3D } from "./pond3d.js";
 import { THREE } from "./kit/three-stage.js";
+import { isMrjTeacher, onMrjTeacher } from "./mrj-teacher.js";
 
 const LIVES = 3, TARGET = 5, ROUNDS = 1;
 const rec = (o) => ({ student_id: "", session_id: "", module_id: "leap_frog", activity_id: "lily_jump", item_id: "", skill_tags: [], response: "", correct: false, latency_ms: 0, accuracy: 0, points: 0, errors: 0, started_at: new Date().toISOString(), ended_at: new Date().toISOString(), ui_locale: "en", ...o });
@@ -136,7 +137,8 @@ export async function startGame(host, { pack, wm = false, maker = false, student
     setShore();
     placePads(); pads.forEach((p, i) => { p.userData.glowAmt = 0; popIn(p, i * 0.06); });
     audio.play("pop", { vol: 0.4, rate: 1.1 });
-    c.trial = { item: L, choices: Z, correctLane: ok, startedAt: new Date().toISOString(), t0: performance.now(), deadline: performance.now() + e.seconds * 1000, locked: false };
+    const secMs = isMrjTeacher() ? 1e9 : e.seconds * 1000;
+    c.trial = { item: L, choices: Z, correctLane: ok, startedAt: new Date().toISOString(), t0: performance.now(), deadline: performance.now() + secMs, locked: false };
     hudUpdate();
     audio.speak([`./audio/q/${/^[a-zA-Z0-9_-]+$/.test(L.item_id) ? L.item_id : "_"}.mp3`]);
   }
@@ -215,10 +217,16 @@ export async function startGame(host, { pack, wm = false, maker = false, student
       await scrollForward(lane);
       nextTrial();
     } else if (timeout) {
+      if (isMrjTeacher()) {
+        record(t.item, resp, false, lat, true); t.locked = false; nextTrial(); return;
+      }
       c.errors += 1; c.lives -= 1; c.streak = 0;
       record(t.item, resp, false, lat, true); hudUpdate(); showPlay(false);
       landNear() ? chomp() : splash(frog.position.x, frog.position.z);
     } else {
+      if (isMrjTeacher()) {
+        record(t.item, resp, false, lat, false); t.locked = false; nextTrial(); return;
+      }
       c.errors += 1; c.lives -= 1; c.streak = 0;
       const p = pads[lane];
       await hop(p.position.x, p.position.z, { toY: p.position.y + 0.06 });
@@ -276,6 +284,11 @@ export async function startGame(host, { pack, wm = false, maker = false, student
 
   // ---------- progress seeding (cloud rows only) ----------
   function seed() {
+    if (isMrjTeacher()) {
+      for (const it of e.items || []) if (it) c.roundDone[it.item_id] = true;
+      c.corrects = target();
+      return;
+    }
     const rows = window.__MRJ_LF_PROGRESS_ROWS && window.__MRJ_LF_PROGRESS_ROWS.length ? window.__MRJ_LF_PROGRESS_ROWS : authDetail && authDetail.progress;
     const latest = passedMap(e, rows); let n = 0;
     for (const it of e.items || []) if (it && latest[it.item_id]) { c.roundDone[it.item_id] = true; n++; }
@@ -290,7 +303,8 @@ export async function startGame(host, { pack, wm = false, maker = false, student
   function begin() {
     if (!c.studentId || c.view !== "start") return;
     audio.unlock(); audio.startMusic();
-    c.startedAt = new Date().toISOString(); c.view = "play"; c.pickLockUntil = performance.now() + 480;
+    c.startedAt = new Date().toISOString(); c.view = "play";
+    c.pickLockUntil = isMrjTeacher() ? 0 : performance.now() + 480;
     $("#lf-start").classList.add("hidden");
     if (!wm) seed();
     refill();
@@ -355,6 +369,11 @@ export async function startGame(host, { pack, wm = false, maker = false, student
   window.addEventListener("message", (ev) => { const d = ev.data; if (d === "mrj-stop" || (d && d.type === "mrj-stop")) mrjHardStop(); });
   window.addEventListener("pagehide", mrjHardStop);
   document.addEventListener("visibilitychange", () => { if (document.hidden) mrjHardStop(); else if (c.view === "play") { audio.unlock(); audio.startMusic(); } });
+  onMrjTeacher(() => {
+    seed();
+    hudUpdate();
+    if (c.view === "play" && c.trial) nextTrial();
+  });
   window.MRJLeapFrog = api; window.LeapFrog = api;
   return api;
 }
