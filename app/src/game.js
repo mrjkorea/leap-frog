@@ -15,6 +15,16 @@ import { createPond3D } from "./pond3d.js";
 import { THREE } from "./kit/three-stage.js";
 import { isMrjTeacher, onMrjTeacher } from "./mrj-teacher.js";
 
+// Question cue files. The Word Master copy carries <meta name="lf-cue-base"> so it can use the
+// whole cue library from the leap-frog site instead of shipping a second copy of every mp3.
+const CUE_BASE = (() => {
+  const m = document.querySelector('meta[name="lf-cue-base"]');
+  const v = (m && m.content || "./audio/q/").trim();
+  return v.endsWith("/") ? v : v + "/";
+})();
+const cueUrl = (id) => CUE_BASE + (/^[a-zA-Z0-9_-]+$/.test(String(id || "")) ? id : "_") + ".mp3";
+
+
 const LIVES = 3, TARGET = 5, ROUNDS = 1;
 const rec = (o) => ({ student_id: "", session_id: "", module_id: "leap_frog", activity_id: "lily_jump", item_id: "", skill_tags: [], response: "", correct: false, latency_ms: 0, accuracy: 0, points: 0, errors: 0, started_at: new Date().toISOString(), ended_at: new Date().toISOString(), ui_locale: "en", ...o });
 const cleanId = (d) => { if (!d || d.id == null) return ""; const e = String(d.id).trim(), l = e.toLowerCase(); return !e || l === "student" || l === "guest" ? "" : e; };
@@ -140,7 +150,7 @@ export async function startGame(host, { pack, wm = false, maker = false, student
     const secMs = isMrjTeacher() ? 1e9 : e.seconds * 1000;
     c.trial = { item: L, choices: Z, correctLane: ok, startedAt: new Date().toISOString(), t0: performance.now(), deadline: performance.now() + secMs, locked: false };
     hudUpdate();
-    audio.speak([`./audio/q/${/^[a-zA-Z0-9_-]+$/.test(L.item_id) ? L.item_id : "_"}.mp3`]);
+    audio.speak([cueUrl(L.item_id)]);
   }
   function setShore() { const on = landNear() && c.view !== "start"; pond.danger = on; if (on && !pond.shore.visible) { pond.shore.visible = true; pond.shore.position.set(0, -1.2, shoreZ() - 4); } if (on) { const y0 = pond.shore.position.y, z0 = pond.shore.position.z, z1 = shoreZ(); tween(0.9, (k) => { const q = ease.outCubic(k); pond.shore.position.y = lerp(y0, 0, q); pond.shore.position.z = lerp(z0, z1, q); }); } }
   function record(item, resp, correct, latency, timeout) {

@@ -30,6 +30,7 @@ const head = `<!DOCTYPE html>
 const html = wmDir
   ? `${head}
     <meta name="mrj-host" content="word-master" />
+    <meta name="lf-cue-base" content="https://mrjkorea.github.io/leap-frog/audio/q/" />
     <script>
       /* Word Master public mode (news packs): this game saves nothing on the device. */
       (function () { try { var p = window.parent; if (p && p !== window && p.WM_PUBLIC_PACK && typeof p.WM_useMemoryStorage === "function") p.WM_useMemoryStorage(window); } catch (e) {} })();
