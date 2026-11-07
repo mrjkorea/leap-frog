@@ -19,7 +19,9 @@ sfx/*.mp3 (hop, pop, chime, sparkle, buzz, fanfare, lose, whoosh, thud)
   Procedural, made for MRJ games and baked to mp3 — CC0.
 Question cues: audio/q/<item_id>.mp3 (baked). No speechSynthesis, no /api/tts.
 
-nouns100 cues: audio/q/<item_id>.mp3 for all 100 items (2026-11-08)
-  Made with macOS `say` (Samantha, rate 132) and ffmpeg from the questions in
-  word-master packs/nouns100/games/leap-frog.json. 24 kHz mono, 128 kbps mp3,
-  mean level about -21 dB, same as the plusNN cues.
+question cues: audio/q/<item_id>.mp3 (3,562 items, 2026-11-08)
+  Made with macOS `say` (Samantha, rate 132) and ffmpeg from the question text in the
+  Word Master packs. 24 kHz mono. The nouns100 batch is 128 kbps; the later batch is
+  48 kbps to keep the repo small. Mean level about -21 dB.
+  Where one word has a different question in two packs, the cue uses the question
+  most packs use.
