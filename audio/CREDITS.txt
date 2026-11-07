@@ -18,3 +18,7 @@ music-happy-adventure.mp3
 sfx/*.mp3 (hop, pop, chime, sparkle, buzz, fanfare, lose, whoosh, thud)
   Procedural, made for MRJ games and baked to mp3 — CC0.
 Question cues: audio/q/<item_id>.mp3 (baked). No speechSynthesis, no /api/tts.
+
+people.mp3, year.mp3, way.mp3 (2026-11-08)
+  Made with macOS `say` (Samantha) and ffmpeg for the nouns100 questions.
+  24 kHz mono, 128 kbps mp3, mean level about -21 dB, same as the plusNN cues.
