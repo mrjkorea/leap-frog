@@ -45,6 +45,9 @@ function loadScores(mocks) {
     setTimeout,
     clearTimeout,
   };
+  // The canonical fleet client ends with `})(window)`, so give the sandbox a window that is itself.
+  sandbox.window = sandbox;
+  sandbox.self = sandbox;
   vm.runInNewContext(code, sandbox);
   return { MRJ_SCORES: sandbox.MRJ_SCORES, fetchCalls, noteCalls };
 }
